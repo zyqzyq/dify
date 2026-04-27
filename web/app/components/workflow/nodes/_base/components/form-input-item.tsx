@@ -10,6 +10,7 @@ import { ChevronDownIcon } from '@heroicons/react/20/solid'
 
 import { RiCheckLine, RiLoader4Line } from '@remixicon/react'
 import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import CheckboxList from '@/app/components/base/checkbox-list'
 import Input from '@/app/components/base/input'
 import { SimpleSelect } from '@/app/components/base/select'
@@ -19,16 +20,18 @@ import AppSelector from '@/app/components/plugins/plugin-detail-panel/app-select
 import ModelParameterModal from '@/app/components/plugins/plugin-detail-panel/model-selector'
 import { PluginCategoryEnum } from '@/app/components/plugins/types'
 import CodeEditor from '@/app/components/workflow/nodes/_base/components/editor/code-editor'
+import DynamicTreeSelectField from '@/app/components/workflow/nodes/_base/components/variable/dynamic-tree-select-field'
 import VarReferencePicker from '@/app/components/workflow/nodes/_base/components/variable/var-reference-picker'
 import useAvailableVarList from '@/app/components/workflow/nodes/_base/hooks/use-available-var-list'
 import { CodeLanguage } from '@/app/components/workflow/nodes/code/types'
 import MixedVariableTextInput from '@/app/components/workflow/nodes/tool/components/mixed-variable-text-input'
 import { VarType } from '@/app/components/workflow/types'
-import { useFetchDynamicOptions } from '@/service/use-plugins'
+import { useFetchDynamicOptions, useFetchDynamicTreeOptions } from '@/service/use-plugins'
 import { useTriggerPluginDynamicOptions } from '@/service/use-triggers'
 import { cn } from '@/utils/classnames'
 import { VarKindType } from '../types'
 import FormInputBoolean from './form-input-boolean'
+import { filterVisibleTreeOptions } from './form-input-item.helpers'
 import FormInputTypeSwitch from './form-input-type-switch'
 
 type Props = {
@@ -63,6 +66,7 @@ const FormInputItem: FC<Props> = ({
   disableVariableInsertion = false,
 }) => {
   const language = useLanguage()
+  const { t } = useTranslation()
   const [toolsOptions, setToolsOptions] = useState<FormOption[] | null>(null)
   const [isLoadingToolsOptions, setIsLoadingToolsOptions] = useState(false)
 
@@ -87,6 +91,7 @@ const FormInputItem: FC<Props> = ({
   const isCheckbox = _type === FormTypeEnum.checkbox
   const isSelect = type === FormTypeEnum.select
   const isDynamicSelect = type === FormTypeEnum.dynamicSelect
+  const isDynamicTreeSelect = type === FormTypeEnum.dynamicTreeSelect
   const isAppSelector = type === FormTypeEnum.appSelector
   const isModelSelector = type === FormTypeEnum.modelSelector
   const showTypeSwitch = isNumber || isBoolean || isObject || isArray || isSelect
@@ -145,7 +150,7 @@ const FormInputItem: FC<Props> = ({
   const getVarKindType = () => {
     if (isFile)
       return VarKindType.variable
-    if (isSelect || isDynamicSelect || isBoolean || isNumber || isArray || isObject)
+    if (isSelect || isDynamicSelect || isDynamicTreeSelect || isBoolean || isNumber || isArray || isObject)
       return VarKindType.constant
     if (isString)
       return VarKindType.mixed
@@ -158,6 +163,13 @@ const FormInputItem: FC<Props> = ({
     currentTool?.name || '',
     variable || '',
     providerType,
+    extraParams,
+  )
+  const { mutateAsync: fetchDynamicTreeOptions } = useFetchDynamicTreeOptions(
+    currentProvider?.plugin_id || '',
+    currentProvider?.name || '',
+    currentTool?.name || '',
+    variable || '',
     extraParams,
   )
 
@@ -183,7 +195,29 @@ const FormInputItem: FC<Props> = ({
   // Fetch dynamic options for tools only (triggers use hook directly)
   useEffect(() => {
     const fetchPanelDynamicOptions = async () => {
-      if (isDynamicSelect && currentTool && currentProvider && (providerType === PluginCategoryEnum.tool || providerType === PluginCategoryEnum.trigger)) {
+      if (!currentTool || !currentProvider)
+        return
+
+      if (isDynamicTreeSelect) {
+        if (providerType !== PluginCategoryEnum.tool)
+          return
+
+        setIsLoadingToolsOptions(true)
+        try {
+          const data = await fetchDynamicTreeOptions()
+          setToolsOptions(data?.options || [])
+        }
+        catch (error) {
+          console.error('Failed to fetch dynamic options:', error)
+          setToolsOptions([])
+        }
+        finally {
+          setIsLoadingToolsOptions(false)
+        }
+        return
+      }
+
+      if (isDynamicSelect && (providerType === PluginCategoryEnum.tool || providerType === PluginCategoryEnum.trigger)) {
         setIsLoadingToolsOptions(true)
         try {
           const data = await fetchDynamicOptions()
@@ -202,12 +236,14 @@ const FormInputItem: FC<Props> = ({
     fetchPanelDynamicOptions()
   }, [
     isDynamicSelect,
+    isDynamicTreeSelect,
     currentTool?.name,
     currentProvider?.name,
     variable,
     extraParams,
     providerType,
     fetchDynamicOptions,
+    fetchDynamicTreeOptions,
   ])
 
   const handleTypeChange = (newType: string) => {
@@ -310,6 +346,11 @@ const FormInputItem: FC<Props> = ({
     const allowedValues = new Set(availableCheckboxOptions.map((option: { value: string }) => option.value))
     return current.filter(item => allowedValues.has(item))
   }, [varInput?.value, defaultValue, availableCheckboxOptions])
+
+  const visibleDynamicTreeOptions = useMemo(
+    () => filterVisibleTreeOptions(dynamicOptions || options || [], value),
+    [dynamicOptions, options, value],
+  )
 
   const handleCheckboxListChange = (selected: string[]) => {
     onChange({
@@ -538,6 +579,17 @@ const FormInputItem: FC<Props> = ({
             </ListboxOptions>
           </div>
         </Listbox>
+      )}
+      {isDynamicTreeSelect && isConstant && (
+        <DynamicTreeSelectField
+          disabled={readOnly}
+          isLoading={isLoadingOptions}
+          value={typeof varInput?.value === 'string' ? varInput.value : undefined}
+          options={visibleDynamicTreeOptions}
+          onChange={handleValueChange}
+          placeholder={placeholder?.[language] || placeholder?.en_US || t('dynamicTreeSelect.placeholder', { ns: 'common' })}
+          language={language}
+        />
       )}
       {isShowJSONEditor && isConstant && (
         <div className="mt-1 w-full">
