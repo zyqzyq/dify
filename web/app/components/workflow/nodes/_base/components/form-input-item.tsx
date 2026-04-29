@@ -50,6 +50,16 @@ type Props = {
   disableVariableInsertion?: boolean
 }
 
+const normalizeDynamicTreeSelectValue = (rawValue: unknown): string[] => {
+  if (Array.isArray(rawValue))
+    return rawValue.filter(item => typeof item === 'string')
+
+  if (typeof rawValue === 'string' && rawValue)
+    return [rawValue]
+
+  return []
+}
+
 const FormInputItem: FC<Props> = ({
   readOnly,
   nodeId,
@@ -97,7 +107,7 @@ const FormInputItem: FC<Props> = ({
   const showTypeSwitch = isNumber || isBoolean || isObject || isArray || isSelect
   const isConstant = varInput?.type === VarKindType.constant || !varInput?.type
   const showVariableSelector = isFile || varInput?.type === VarKindType.variable
-  const isMultipleSelect = multiple && (isSelect || isDynamicSelect)
+  const isMultipleSelect = multiple && (isSelect || isDynamicSelect || isDynamicTreeSelect)
 
   const { availableVars, availableNodesWithParent } = useAvailableVarList(nodeId, {
     onlyLeafNodeVar: false,
@@ -584,7 +594,8 @@ const FormInputItem: FC<Props> = ({
         <DynamicTreeSelectField
           disabled={readOnly}
           isLoading={isLoadingOptions}
-          value={typeof varInput?.value === 'string' ? varInput.value : undefined}
+          multiple={isMultipleSelect}
+          value={normalizeDynamicTreeSelectValue(varInput?.value)}
           options={visibleDynamicTreeOptions}
           onChange={handleValueChange}
           placeholder={placeholder?.[language] || placeholder?.en_US || t('dynamicTreeSelect.placeholder', { ns: 'common' })}
