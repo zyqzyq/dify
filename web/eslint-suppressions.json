@@ -3168,11 +3168,6 @@
       "count": 1
     }
   },
-  "app/components/workflow/nodes/_base/components/form-input-item.tsx": {
-    "ts/no-explicit-any": {
-      "count": 33
-    }
-  },
   "app/components/workflow/nodes/_base/components/input-support-select-var.tsx": {
     "ts/no-explicit-any": {
       "count": 1

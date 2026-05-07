@@ -71,7 +71,7 @@ type FormInputState = {
 const optionMatchesValue = (
   values: ResourceVarInputs,
   showOnItem: ShowOnCondition,
-) => values[showOnItem.variable]?.value === showOnItem.value || values[showOnItem.variable] === showOnItem.value
+) => values[showOnItem.variable]?.value === showOnItem.value
 
 const getOptionLabel = (option: SelectableOption, language: string) => {
   if (typeof option.label === 'string')
@@ -212,7 +212,7 @@ export const filterVisibleTreeOptions = (
 ): FormOption[] => {
   return options.reduce<FormOption[]>((acc, option) => {
     const isVisible = !option.show_on?.length || option.show_on.every(
-      showOnItem => values[showOnItem.variable]?.value === showOnItem.value || values[showOnItem.variable] === showOnItem.value,
+      showOnItem => values[showOnItem.variable]?.value === showOnItem.value,
     )
     if (!isVisible)
       return acc

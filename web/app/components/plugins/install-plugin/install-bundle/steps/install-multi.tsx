@@ -39,21 +39,23 @@ const InstallByDSLList = ({
   ref,
 }: Props) => {
   const systemFeatures = useGlobalPublicStore(s => s.systemFeatures)
+  const marketplacePluginInfos = useMemo(
+    () => allPlugins.filter(d => d.type === 'marketplace').map((d) => {
+      const dependency = (d as GitHubItemAndMarketPlaceDependency).value
+      const [orgPart, nameAndVersionPart] = dependency.marketplace_plugin_unique_identifier!.split('@')[0].split('/')
+      const [name, version] = nameAndVersionPart.split(':')
+      return {
+        organization: orgPart,
+        plugin: name,
+        version,
+      }
+    }),
+    [allPlugins],
+  )
   // DSL has id, to get plugin info to show more info
-  const { isLoading: isFetchingMarketplaceDataById, data: infoGetById, error: infoByIdError } = useFetchPluginsInMarketPlaceByInfo(allPlugins.filter(d => d.type === 'marketplace').map((d) => {
-    const dependecy = (d as GitHubItemAndMarketPlaceDependency).value
-    // split org, name, version by / and :
-    // and remove @ and its suffix
-    const [orgPart, nameAndVersionPart] = dependecy.marketplace_plugin_unique_identifier!.split('@')[0].split('/')
-    const [name, version] = nameAndVersionPart.split(':')
-    return {
-      organization: orgPart,
-      plugin: name,
-      version,
-    }
-  }))
+  const { isLoading: isFetchingMarketplaceDataById, data: infoGetById, error: infoByIdError } = useFetchPluginsInMarketPlaceByInfo(marketplacePluginInfos)
   // has meta(org,name,version), to get id
-  const { isLoading: isFetchingDataByMeta, data: infoByMeta, error: infoByMetaError } = useFetchPluginsInMarketPlaceByInfo(allPlugins.filter(d => d.type === 'marketplace').map(d => (d as GitHubItemAndMarketPlaceDependency).value!))
+  const { isLoading: isFetchingDataByMeta, data: infoByMeta, error: infoByMetaError } = useFetchPluginsInMarketPlaceByInfo(marketplacePluginInfos)
 
   const [plugins, doSetPlugins] = useState<(Plugin | undefined)[]>((() => {
     const hasLocalPackage = allPlugins.some(d => d.type === 'package')

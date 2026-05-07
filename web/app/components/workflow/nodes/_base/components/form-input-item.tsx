@@ -5,12 +5,13 @@ import type { CredentialFormSchema, FormOption, FormTypeEnum } from '@/app/compo
 import type { Event, Tool } from '@/app/components/tools/types'
 import type { TriggerWithProvider } from '@/app/components/workflow/block-selector/types'
 import type { ToolWithProvider, ValueSelector, Var } from '@/app/components/workflow/types'
-import { cn } from '@langgenius/dify-ui/cn'
-import { Select, SelectContent, SelectItem, SelectItemIndicator, SelectItemText, SelectTrigger } from '@langgenius/dify-ui/select'
+import { RiCheckLine } from '@remixicon/react'
+import Image from 'next/image'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import CheckboxList from '@/app/components/base/checkbox-list'
 import Input from '@/app/components/base/input'
+import { SimpleSelect } from '@/app/components/base/select'
 import { useLanguage } from '@/app/components/header/account-setting/model-provider-page/hooks'
 import AppSelector from '@/app/components/plugins/plugin-detail-panel/app-selector'
 import ModelParameterModal from '@/app/components/plugins/plugin-detail-panel/model-selector'
@@ -21,11 +22,13 @@ import MixedVariableTextInput from '@/app/components/workflow/nodes/tool/compone
 import { VarType } from '@/app/components/workflow/types'
 import { useFetchDynamicOptions, useFetchDynamicTreeOptions } from '@/service/use-plugins'
 import { useTriggerPluginDynamicOptions } from '@/service/use-triggers'
+import { cn } from '@/utils/classnames'
 import { VarKindType } from '../types'
 import FormInputBoolean from './form-input-boolean'
 import FormInputDynamicTreeSelect from './form-input-dynamic-tree-select'
 import {
   filterVisibleOptions,
+  filterVisibleTreeOptions,
   getCheckboxListOptions,
   getCheckboxListValue,
   getFilterVar,
@@ -69,21 +72,6 @@ const normalizeDynamicTreeSelectValue = (rawValue: unknown): string[] => {
     return [rawValue]
 
   return []
-}
-
-const filterVisibleTreeOptions = (options: FormOption[], values: ResourceVarInputs): FormOption[] => {
-  return options.reduce<FormOption[]>((acc, option) => {
-    const isVisible = !option.show_on?.length || option.show_on.every(
-      showOnItem => values[showOnItem.variable]?.value === showOnItem.value || values[showOnItem.variable] === showOnItem.value,
-    )
-
-    if (!isVisible)
-      return acc
-
-    const children = option.children?.length ? filterVisibleTreeOptions(option.children, values) : undefined
-    acc.push({ ...option, children })
-    return acc
-  }, [])
 }
 
 const FormInputItem: FC<Props> = ({
@@ -315,7 +303,7 @@ const FormInputItem: FC<Props> = ({
     [dynamicOptions, options, value],
   )
   const visibleDynamicTreeOptions = useMemo(
-    () => filterVisibleTreeOptions(dynamicOptions || options || [], value),
+    () => filterVisibleTreeOptions((dynamicOptions ?? options ?? []) as FormOption[], value),
     [dynamicOptions, options, value],
   )
   const staticSelectItems = useMemo(
@@ -341,9 +329,6 @@ const FormInputItem: FC<Props> = ({
       },
     })
   }
-  const selectedStaticOption = staticSelectItems.find(item => item.value === (varInput?.value as string | undefined)) ?? null
-  const selectedDynamicOption = dynamicSelectItems.find(item => item.value === (varInput?.value as string | undefined)) ?? null
-
   return (
     <div className={cn('gap-1', !(isShowJSONEditor && isConstant) && 'flex')}>
       {showTypeSwitch && (
@@ -387,26 +372,32 @@ const FormInputItem: FC<Props> = ({
         />
       )}
       {isSelect && isConstant && !isMultipleSelect && (
-        <Select
-          value={selectedStaticOption?.value ?? null}
+        <SimpleSelect
+          wrapperClassName="h-8 grow"
           disabled={readOnly}
-          onValueChange={value => value && handleValueChange(value)}
-        >
-          <SelectTrigger className="h-8 grow">
-            {selectedStaticOption?.name ?? placeholder?.[language] ?? placeholder?.en_US}
-          </SelectTrigger>
-          <SelectContent popupClassName="w-(--anchor-width)">
-            {staticSelectItems.map(item => (
-              <SelectItem key={item.value} value={item.value}>
-                {item.icon && (
-                  <img src={item.icon} alt="" className="mr-2 h-4 w-4 shrink-0" />
-                )}
-                <SelectItemText>{item.name}</SelectItemText>
-                <SelectItemIndicator />
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          defaultValue={varInput?.value as string | number | undefined}
+          items={staticSelectItems}
+          onSelect={item => handleValueChange(item.value as string)}
+          placeholder={placeholder?.[language] || placeholder?.en_US}
+          notClearable
+          renderOption={staticSelectItems.some(item => item.icon)
+            ? ({ item, selected }) => (
+                <>
+                  <div className="flex items-center">
+                    {item.icon && (
+                      <Image src={item.icon} alt="" width={16} height={16} className="mr-2 h-4 w-4 shrink-0" unoptimized />
+                    )}
+                    <span className={cn('block truncate', selected && 'font-normal')}>{item.name}</span>
+                  </div>
+                  {selected && (
+                    <span className="absolute inset-y-0 right-0 flex items-center pr-2 text-text-accent">
+                      <RiCheckLine className="h-4 w-4" aria-hidden="true" />
+                    </span>
+                  )}
+                </>
+              )
+            : undefined}
+        />
       )}
       {isSelect && isConstant && isMultipleSelect && (
         <MultiSelectField
@@ -419,26 +410,31 @@ const FormInputItem: FC<Props> = ({
         />
       )}
       {isDynamicSelect && !isMultipleSelect && (
-        <Select
-          value={selectedDynamicOption?.value ?? null}
+        <SimpleSelect
+          wrapperClassName="h-8 grow"
           disabled={readOnly || isLoadingOptions}
-          onValueChange={value => value && handleValueChange(value)}
-        >
-          <SelectTrigger className="h-8 grow">
-            {selectedDynamicOption?.name ?? (isLoadingOptions ? t('dynamicSelect.loading', { ns: 'common' }) : (placeholder?.[language] ?? placeholder?.en_US))}
-          </SelectTrigger>
-          <SelectContent popupClassName="w-(--anchor-width)">
-            {dynamicSelectItems.map(item => (
-              <SelectItem key={item.value} value={item.value}>
-                {item.icon && (
-                  <img src={item.icon} alt="" className="mr-2 h-4 w-4 shrink-0" />
-                )}
-                <SelectItemText>{item.name}</SelectItemText>
-                <SelectItemIndicator />
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          defaultValue={varInput?.value as string | number | undefined}
+          items={dynamicSelectItems}
+          onSelect={item => handleValueChange(item.value as string)}
+          placeholder={isLoadingOptions ? t('dynamicSelect.loading', { ns: 'common' }) : (placeholder?.[language] ?? placeholder?.en_US)}
+          isLoading={isLoadingOptions}
+          notClearable
+          renderOption={dynamicSelectItems.some(item => item.icon)
+            ? ({ item, selected }) => (
+                <div className="flex items-center">
+                  {item.icon && (
+                    <Image src={item.icon} alt="" width={16} height={16} className="mr-2 h-4 w-4 shrink-0" unoptimized />
+                  )}
+                  <span className={cn('block truncate', selected && 'font-normal')}>{item.name}</span>
+                  {selected && (
+                    <span className="absolute inset-y-0 right-0 flex items-center pr-2 text-text-accent">
+                      <RiCheckLine className="h-4 w-4" aria-hidden="true" />
+                    </span>
+                  )}
+                </div>
+              )
+            : undefined}
+        />
       )}
       {isDynamicSelect && isMultipleSelect && (
         <MultiSelectField

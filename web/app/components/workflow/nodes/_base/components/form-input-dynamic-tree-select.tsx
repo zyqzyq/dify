@@ -2,12 +2,13 @@
 
 import type { FC } from 'react'
 import type { FormOption } from '@/app/components/header/account-setting/model-provider-page/declarations'
+import { Popover, PopoverButton, PopoverPanel, Transition } from '@headlessui/react'
 import { ChevronDownIcon } from '@heroicons/react/20/solid'
-import { cn } from '@langgenius/dify-ui/cn'
-import { Popover, PopoverContent, PopoverTrigger } from '@langgenius/dify-ui/popover'
 import { RiArrowDownSLine, RiArrowRightSLine, RiCheckLine, RiLoader4Line } from '@remixicon/react'
-import { useMemo, useState } from 'react'
+import Image from 'next/image'
+import { Fragment, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { cn } from '@/utils/classnames'
 
 type Props = {
   disabled?: boolean
@@ -109,9 +110,9 @@ const TreeNode: FC<TreeNodeProps> = ({
           onClick={() => onSelect(option.value)}
         >
           {option.icon && (
-            <img src={option.icon} alt="" className="h-4 w-4 shrink-0" />
+            <Image src={option.icon} alt="" width={16} height={16} className="h-4 w-4 shrink-0" unoptimized />
           )}
-          <span className="min-w-0 grow truncate system-sm-regular">{label}</span>
+          <span className="system-sm-regular min-w-0 grow truncate">{label}</span>
           {isSelected && <RiCheckLine aria-hidden className="h-4 w-4 shrink-0 text-text-accent" />}
         </button>
       </div>
@@ -142,7 +143,6 @@ const FormInputDynamicTreeSelect: FC<Props> = ({
   value,
 }) => {
   const { t } = useTranslation()
-  const [isOpen, setIsOpen] = useState(false)
   const [collapsedValues, setCollapsedValues] = useState<Set<string>>(() => new Set())
   const selectedValues = useMemo(() => normalizeValues(value), [value])
   const selectedValueSet = useMemo(() => new Set(selectedValues), [selectedValues])
@@ -184,7 +184,7 @@ const FormInputDynamicTreeSelect: FC<Props> = ({
     })
   }
 
-  const handleSelect = (nextValue: string) => {
+  const handleSelect = (nextValue: string, closePopover: () => void) => {
     if (multiple) {
       if (selectedValueSet.has(nextValue))
         onChange(selectedValues.filter(item => item !== nextValue))
@@ -194,21 +194,20 @@ const FormInputDynamicTreeSelect: FC<Props> = ({
     }
 
     onChange([nextValue])
-    setIsOpen(false)
+    closePopover()
   }
 
   const hasSelection = selectedValues.length > 0
 
   return (
-    <Popover open={isOpen} onOpenChange={setIsOpen}>
-      <PopoverTrigger
-        disabled={disabled || isLoading}
-        render={(
-          <button
-            type="button"
+    <Popover className="relative h-8 w-full grow">
+      {({ close }) => (
+        <>
+          <PopoverButton
+            disabled={disabled || isLoading}
             className={cn(
-              'group/dynamic-tree relative flex h-8 w-full grow items-center rounded-lg border-0 bg-components-input-bg-normal pr-10 pl-3 text-left',
-              'hover:bg-state-base-hover-alt focus-visible:bg-state-base-hover-alt focus-visible:outline-hidden',
+              'group/dynamic-tree relative flex h-8 w-full grow cursor-pointer items-center rounded-lg border-0 bg-components-input-bg-normal pl-3 pr-10 text-left',
+              'focus-visible:outline-hidden hover:bg-state-base-hover-alt focus-visible:bg-state-base-hover-alt',
               'disabled:cursor-not-allowed disabled:bg-components-input-bg-disabled disabled:hover:bg-components-input-bg-disabled',
               'system-sm-regular',
               hasSelection
@@ -219,7 +218,7 @@ const FormInputDynamicTreeSelect: FC<Props> = ({
             <span className="block min-w-0 grow truncate">
               {triggerLabel}
             </span>
-            <span className="absolute inset-y-0 right-0 flex items-center pr-2">
+            <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
               {isLoading
                 ? <RiLoader4Line aria-hidden className="h-3.5 w-3.5 animate-spin text-text-secondary" />
                 : (
@@ -229,36 +228,45 @@ const FormInputDynamicTreeSelect: FC<Props> = ({
                     />
                   )}
             </span>
-          </button>
-        )}
-      />
-      <PopoverContent
-        sideOffset={4}
-        popupClassName="w-(--anchor-width) max-h-80 overflow-auto p-1"
-      >
-        {!options.length
-          ? (
-              <div className="px-2 py-1.5 system-sm-regular text-text-tertiary">
-                {t('dynamicSelect.noData', { ns: 'common' })}
-              </div>
-            )
-          : (
-              <div role="listbox" aria-multiselectable={multiple ? true : undefined}>
-                {options.map(option => (
-                  <TreeNode
-                    key={option.value}
-                    expandedValues={expandedValues}
-                    language={language}
-                    level={0}
-                    onSelect={handleSelect}
-                    option={option}
-                    selectedValues={selectedValueSet}
-                    toggleExpand={toggleExpand}
-                  />
-                ))}
-              </div>
-            )}
-      </PopoverContent>
+          </PopoverButton>
+          <Transition
+            as={Fragment}
+            leave="transition ease-in duration-100"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <PopoverPanel
+              className={cn(
+                'absolute left-0 right-0 top-full z-[1000] mt-1 max-h-80 overflow-y-auto rounded-xl border-[0.5px]',
+                'border-components-panel-border bg-components-panel-bg-blur p-1 shadow-lg backdrop-blur-sm',
+              )}
+            >
+              {!options.length
+                ? (
+                    <div className="system-sm-regular px-2 py-1.5 text-text-tertiary">
+                      {t('dynamicSelect.noData', { ns: 'common' })}
+                    </div>
+                  )
+                : (
+                    <div role="listbox" aria-multiselectable={multiple ? true : undefined}>
+                      {options.map(option => (
+                        <TreeNode
+                          key={option.value}
+                          expandedValues={expandedValues}
+                          language={language}
+                          level={0}
+                          onSelect={v => handleSelect(v, close)}
+                          option={option}
+                          selectedValues={selectedValueSet}
+                          toggleExpand={toggleExpand}
+                        />
+                      ))}
+                    </div>
+                  )}
+            </PopoverPanel>
+          </Transition>
+        </>
+      )}
     </Popover>
   )
 }
