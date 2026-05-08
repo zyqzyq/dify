@@ -9,12 +9,14 @@ import Image from 'next/image'
 import CodeEditor from '@/app/components/workflow/nodes/_base/components/editor/code-editor'
 import { CodeLanguage } from '@/app/components/workflow/nodes/code/types'
 import { cn } from '@/utils/classnames'
+import { OpenChangeBridge } from '@/utils/open-change-bridge'
 
 type MultiSelectFieldProps = {
   disabled: boolean
   isLoading?: boolean
   items: SelectItem[]
   onChange: (value: string[]) => void
+  onOpenChange?: (open: boolean) => void
   placeholder?: string
   selectedLabel: string
   value: string[]
@@ -42,6 +44,7 @@ export const MultiSelectField: FC<MultiSelectFieldProps> = ({
   isLoading = false,
   items,
   onChange,
+  onOpenChange,
   placeholder,
   selectedLabel,
   value,
@@ -64,40 +67,43 @@ export const MultiSelectField: FC<MultiSelectFieldProps> = ({
 
   return (
     <Listbox multiple value={value} onChange={onChange} disabled={disabled}>
-      <div className="group/simple-select relative h-8 grow">
-        <ListboxButton className="focus-visible:outline-hidden flex h-full w-full cursor-pointer items-center rounded-lg border-0 bg-components-input-bg-normal pl-3 pr-10 focus-visible:bg-state-base-hover-alt group-hover/simple-select:bg-state-base-hover-alt sm:text-sm sm:leading-6">
-          <span className={textClassName}>
-            {renderLabel()}
-          </span>
-          <span className="absolute inset-y-0 right-0 flex items-center pr-2">
-            {isLoading ? <LoadingIndicator /> : <ToggleIndicator />}
-          </span>
-        </ListboxButton>
-        <ListboxOptions className="backdrop-blur-xs focus:outline-hidden absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-xl border-[0.5px] border-components-panel-border bg-components-panel-bg-blur px-1 py-1 text-base shadow-lg sm:text-sm">
-          {items.map(item => (
-            <ListboxOption
-              key={item.value}
-              value={item.value}
-              className={({ focus }) =>
-                cn('relative cursor-pointer select-none rounded-lg py-2 pl-3 pr-9 text-text-secondary hover:bg-state-base-hover', focus && 'bg-state-base-hover')}
-            >
-              {({ selected }) => (
-                <>
-                  <div className="flex items-center">
-                    {item.icon && (
-                      <Image src={item.icon} alt="" width={16} height={16} className="mr-2 h-4 w-4" unoptimized />
-                    )}
-                    <span className={cn('block truncate', selected && 'font-normal')}>
-                      {item.name}
-                    </span>
-                  </div>
-                  {selected && <SelectedMark />}
-                </>
-              )}
-            </ListboxOption>
-          ))}
-        </ListboxOptions>
-      </div>
+      {({ open }) => (
+        <div className="group/simple-select relative h-8 grow">
+          <OpenChangeBridge open={open} onOpenChange={onOpenChange} />
+          <ListboxButton className="focus-visible:outline-hidden flex h-full w-full cursor-pointer items-center rounded-lg border-0 bg-components-input-bg-normal pl-3 pr-10 focus-visible:bg-state-base-hover-alt group-hover/simple-select:bg-state-base-hover-alt sm:text-sm sm:leading-6">
+            <span className={textClassName}>
+              {renderLabel()}
+            </span>
+            <span className="absolute inset-y-0 right-0 flex items-center pr-2">
+              {isLoading ? <LoadingIndicator /> : <ToggleIndicator />}
+            </span>
+          </ListboxButton>
+          <ListboxOptions className="backdrop-blur-xs focus:outline-hidden absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-xl border-[0.5px] border-components-panel-border bg-components-panel-bg-blur px-1 py-1 text-base shadow-lg sm:text-sm">
+            {items.map(item => (
+              <ListboxOption
+                key={item.value}
+                value={item.value}
+                className={({ focus }) =>
+                  cn('relative cursor-pointer select-none rounded-lg py-2 pl-3 pr-9 text-text-secondary hover:bg-state-base-hover', focus && 'bg-state-base-hover')}
+              >
+                {({ selected }) => (
+                  <>
+                    <div className="flex items-center">
+                      {item.icon && (
+                        <Image src={item.icon} alt="" width={16} height={16} className="mr-2 h-4 w-4" unoptimized />
+                      )}
+                      <span className={cn('block truncate', selected && 'font-normal')}>
+                        {item.name}
+                      </span>
+                    </div>
+                    {selected && <SelectedMark />}
+                  </>
+                )}
+              </ListboxOption>
+            ))}
+          </ListboxOptions>
+        </div>
+      )}
     </Listbox>
   )
 }

@@ -12,6 +12,7 @@ import {
   PortalToFollowElemTrigger,
 } from '@/app/components/base/portal-to-follow-elem'
 import { cn } from '@/utils/classnames'
+import { OpenChangeBridge } from '@/utils/open-change-bridge'
 import Badge from '../badge/index'
 
 const defaultItems = [
@@ -228,12 +229,10 @@ const SimpleSelect: FC<ISelectProps> = ({
     >
       {({ open }) => (
         <div className={cn('group/simple-select relative h-9', wrapperClassName)}>
+          <OpenChangeBridge open={open} onOpenChange={onOpenChange} />
           {renderTrigger && <ListboxButton className="w-full">{renderTrigger(selectedItem, open)}</ListboxButton>}
           {!renderTrigger && (
             <ListboxButton
-              onClick={() => {
-                onOpenChange?.(open)
-              }}
               className={cn(`flex h-full w-full items-center rounded-lg border-0 bg-components-input-bg-normal pl-3 pr-10 focus-visible:bg-state-base-hover-alt focus-visible:outline-none group-hover/simple-select:bg-state-base-hover-alt sm:text-sm sm:leading-6 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`, className)}
             >
               <span className={cn('system-sm-regular block truncate text-left text-components-input-text-filled', !selectedItem?.name && 'text-components-input-text-placeholder')}>{selectedItem?.name ?? localPlaceholder}</span>

@@ -9,6 +9,7 @@ import Image from 'next/image'
 import { Fragment, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/utils/classnames'
+import { OpenChangeBridge } from '@/utils/open-change-bridge'
 
 type Props = {
   disabled?: boolean
@@ -16,6 +17,8 @@ type Props = {
   language: string
   multiple?: boolean
   onChange: (value: string[]) => void
+  /** Called when the popover opens or closes (after mount); use for lazy-loaded options. */
+  onPanelOpenChange?: (open: boolean) => void
   options: FormOption[]
   placeholder?: string
   value?: string[]
@@ -138,6 +141,7 @@ const FormInputDynamicTreeSelect: FC<Props> = ({
   language,
   multiple = false,
   onChange,
+  onPanelOpenChange,
   options,
   placeholder,
   value,
@@ -201,8 +205,11 @@ const FormInputDynamicTreeSelect: FC<Props> = ({
 
   return (
     <Popover className="relative h-8 w-full grow">
-      {({ close }) => (
+      {({ open, close }) => (
         <>
+          {onPanelOpenChange && (
+            <OpenChangeBridge open={open} onOpenChange={onPanelOpenChange} />
+          )}
           <PopoverButton
             disabled={disabled || isLoading}
             className={cn(
