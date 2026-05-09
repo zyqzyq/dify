@@ -1,4 +1,5 @@
 import type { Node } from 'reactflow'
+import type { ReasoningConfigValue } from '../utils/show-on'
 import type { CredentialFormSchema } from '@/app/components/header/account-setting/model-provider-page/declarations'
 import type { ToolFormSchema } from '@/app/components/tools/utils/to-form-schema'
 import type { SchemaRoot } from '@/app/components/workflow/nodes/llm/types'
@@ -14,7 +15,7 @@ import {
 } from '@remixicon/react'
 import { useBoolean } from 'ahooks'
 import { produce } from 'immer'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import Input from '@/app/components/base/input'
 import { SimpleSelect } from '@/app/components/base/select'
@@ -33,19 +34,42 @@ import MixedVariableTextInput from '@/app/components/workflow/nodes/tool/compone
 import { VarType as VarKindType } from '@/app/components/workflow/nodes/tool/types'
 import { VarType } from '@/app/components/workflow/types'
 import { cn } from '@/utils/classnames'
+import {
+  isReasoningConfigShowOnSatisfied,
+  reasoningShowOnConditionMet,
+} from '../utils/show-on'
 import SchemaModal from './schema-modal'
 
-type ReasoningConfigInputValue = {
-  type?: VarKindType
-  value?: unknown
-} | null
+export type { ReasoningConfigValue } from '../utils/show-on'
 
-type ReasoningConfigInput = {
-  value: ReasoningConfigInputValue
-  auto?: 0 | 1
+function coerceReasoningScalarDefault(schema: ToolFormSchema): unknown {
+  const raw = schema.default
+  const formType = schema.type
+  if (schema._type === 'boolean' || formType === FormTypeEnum.checkbox || formType === FormTypeEnum.boolean) {
+    if (typeof raw === 'string')
+      return raw === 'true' || raw === '1'
+    if (typeof raw === 'boolean')
+      return raw
+    return false
+  }
+  if (formType === FormTypeEnum.textNumber) {
+    if (typeof raw === 'string' && raw !== '')
+      return Number.parseFloat(raw)
+    if (typeof raw === 'number')
+      return raw
+    return ''
+  }
+  return raw ?? null
 }
 
-export type ReasoningConfigValue = Record<string, ReasoningConfigInput>
+function getReasoningVarKindType(type: string): VarKindType | undefined {
+  if (type === FormTypeEnum.file || type === FormTypeEnum.files)
+    return VarKindType.variable
+  if (type === FormTypeEnum.select || type === FormTypeEnum.checkbox || type === FormTypeEnum.textNumber || type === FormTypeEnum.array || type === FormTypeEnum.object)
+    return VarKindType.constant
+  if (type === FormTypeEnum.textInput || type === FormTypeEnum.secretInput)
+    return VarKindType.mixed
+}
 
 type Props = {
   value: ReasoningConfigValue
@@ -66,20 +90,56 @@ const ReasoningConfigForm: React.FC<Props> = ({
 }) => {
   const { t } = useTranslation()
   const language = useLanguage()
-  const getVarKindType = (type: string) => {
-    if (type === FormTypeEnum.file || type === FormTypeEnum.files)
-      return VarKindType.variable
-    if (type === FormTypeEnum.select || type === FormTypeEnum.checkbox || type === FormTypeEnum.textNumber || type === FormTypeEnum.array || type === FormTypeEnum.object)
-      return VarKindType.constant
-    if (type === FormTypeEnum.textInput || type === FormTypeEnum.secretInput)
-      return VarKindType.mixed
-  }
+
+  const visibleSchemas = useMemo(
+    () => schemas.filter(s => isReasoningConfigShowOnSatisfied(s.show_on, value)),
+    [schemas, value],
+  )
+
+  const schemasVarsKey = useMemo(() => schemas.map(s => s.variable).join('\0'), [schemas])
+  const prevVisibleVarsRef = useRef<Set<string> | null>(null)
+
+  useEffect(() => {
+    prevVisibleVarsRef.current = null
+  }, [schemasVarsKey])
+
+  useEffect(() => {
+    const currentVisible = new Set(visibleSchemas.map(s => s.variable))
+    if (prevVisibleVarsRef.current === null) {
+      prevVisibleVarsRef.current = currentVisible
+      return
+    }
+    const prevVisible = prevVisibleVarsRef.current
+    let patch: ReasoningConfigValue | null = null
+    for (const s of schemas) {
+      const variable = s.variable
+      const wasVisible = prevVisible.has(variable)
+      const nowVisible = currentVisible.has(variable)
+      if (wasVisible && !nowVisible) {
+        patch ??= { ...value }
+        const prevEntry = value[variable]
+        patch[variable] = {
+          auto: prevEntry?.auto ?? 0,
+          value:
+            prevEntry?.auto === 1
+              ? null
+              : {
+                  type: getReasoningVarKindType(s.type),
+                  value: coerceReasoningScalarDefault(s),
+                },
+        }
+      }
+    }
+    prevVisibleVarsRef.current = currentVisible
+    if (patch)
+      onChange(patch)
+  }, [visibleSchemas, schemas, schemasVarsKey, value, onChange])
 
   const handleAutomatic = (key: string, val: boolean, type: string) => {
     onChange({
       ...value,
       [key]: {
-        value: val ? null : { type: getVarKindType(type), value: null },
+        value: val ? null : { type: getReasoningVarKindType(type), value: null },
         auto: val ? 1 : 0,
       },
     })
@@ -99,7 +159,7 @@ const ReasoningConfigForm: React.FC<Props> = ({
     return (newValue: unknown) => {
       const res = produce(value, (draft: ToolVarInputs) => {
         draft[variable].value = {
-          type: getVarKindType(varType),
+          type: getReasoningVarKindType(varType),
           value: newValue,
         }
       })
@@ -164,7 +224,10 @@ const ReasoningConfigForm: React.FC<Props> = ({
       placeholder,
       options,
     } = schema
-    const auto = value[variable]?.auto
+    const entry = value[variable]
+    if (!entry)
+      return null
+    const auto = entry.auto
     const tooltipContent = (tooltip && (
       <Tooltip
         popupContent={(
@@ -176,7 +239,7 @@ const ReasoningConfigForm: React.FC<Props> = ({
         asChild={false}
       />
     ))
-    const varInput = value[variable].value
+    const varInput = entry.value
     const isString = type === FormTypeEnum.textInput || type === FormTypeEnum.secretInput
     const isNumber = type === FormTypeEnum.textNumber
     const isObject = type === FormTypeEnum.object
@@ -296,8 +359,8 @@ const ReasoningConfigForm: React.FC<Props> = ({
                 wrapperClassName="h-8 grow"
                 defaultValue={varInput?.value as string | number | undefined}
                 items={options.filter((option) => {
-                  if (option.show_on.length)
-                    return option.show_on.every(showOnItem => value[showOnItem.variable]?.value?.value === showOnItem.value)
+                  if (option.show_on?.length)
+                    return option.show_on.every(showOnItem => reasoningShowOnConditionMet(value, showOnItem))
 
                   return true
                 }).map(option => ({ value: option.value, name: option.label[language] || option.label.en_US }))}
@@ -370,7 +433,7 @@ const ReasoningConfigForm: React.FC<Props> = ({
   }
   return (
     <div className="space-y-3 px-4 py-2">
-      {!isShowSchema && schemas.map(schema => renderField(schema, (s: SchemaRoot, rootName: string) => {
+      {!isShowSchema && visibleSchemas.map(schema => renderField(schema, (s: SchemaRoot, rootName: string) => {
         setSchema(s)
         setSchemaRootName(rootName)
         showSchema()

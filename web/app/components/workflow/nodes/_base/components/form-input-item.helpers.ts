@@ -8,6 +8,7 @@ import type {
 } from '@/app/components/header/account-setting/model-provider-page/declarations'
 import type { ValueSelector, Var } from '@/app/components/workflow/types'
 import { FormTypeEnum } from '@/app/components/header/account-setting/model-provider-page/declarations'
+import { toolSettingShowOnConditionMet } from '@/app/components/plugins/plugin-detail-panel/tool-selector/utils/show-on'
 import { VarType } from '@/app/components/workflow/types'
 import { VarKindType } from '../types'
 
@@ -22,8 +23,8 @@ type FormInputSchema = CredentialFormSchema & Partial<{
 type FormInputValue = ResourceVarInputs[string] | undefined
 
 type ShowOnCondition = {
-  value: unknown
   variable: string
+  value: string
 }
 
 type OptionLabel = string | TypeWithI18N
@@ -85,7 +86,7 @@ type FormInputState = {
 const optionMatchesValue = (
   values: ResourceVarInputs,
   showOnItem: ShowOnCondition,
-) => values[showOnItem.variable]?.value === showOnItem.value
+) => toolSettingShowOnConditionMet(values, showOnItem)
 
 const getOptionLabel = (option: SelectableOption, language: string) => {
   if (typeof option.label === 'string')
@@ -226,7 +227,7 @@ export const filterVisibleTreeOptions = (
 ): FormOption[] => {
   return options.reduce<FormOption[]>((acc, option) => {
     const isVisible = !option.show_on?.length || option.show_on.every(
-      showOnItem => values[showOnItem.variable]?.value === showOnItem.value,
+      showOnItem => toolSettingShowOnConditionMet(values, showOnItem),
     )
     if (!isVisible)
       return acc
