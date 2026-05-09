@@ -6,15 +6,22 @@ WORKDIR /app/api
 # Install uv
 ENV UV_VERSION=0.8.9
 
-RUN pip install --no-cache-dir uv==${UV_VERSION}
+# PyPI mirror for pip only. Do not set UV_DEFAULT_INDEX: Aliyun (or any non-default index) makes
+# `uv sync --locked` reject the repo lockfile, which is generated against PyPI.
+ARG PYPI_INDEX_URL=https://mirrors.aliyun.com/pypi/simple
+
+RUN pip install --no-cache-dir -i "${PYPI_INDEX_URL}" uv==${UV_VERSION}
 
 
 FROM base AS packages
 
-# if you located in China, you can use aliyun mirror to speed up
-# RUN sed -i 's@deb.debian.org@mirrors.aliyun.com@g' /etc/apt/sources.list.d/debian.sources
+ARG APT_DEBIAN_MIRROR=mirrors.aliyun.com
 
-RUN apt-get update \
+RUN set -eux \
+    && if [ "${APT_DEBIAN_MIRROR}" != "deb.debian.org" ]; then \
+        sed -i "s@deb.debian.org@${APT_DEBIAN_MIRROR}@g" /etc/apt/sources.list.d/debian.sources; \
+    fi \
+    && apt-get update \
     && apt-get install -y --no-install-recommends \
           # basic environment
           g++ \
@@ -53,24 +60,33 @@ ARG dify_uid=1001
 ARG NODE_MAJOR=22
 ARG NODE_PACKAGE_VERSION=22.21.0-1nodesource1
 ARG NODESOURCE_KEY_FPR=6F71F525282841EEDAF851B42F59B5F99B1BE0B4
+ARG APT_DEBIAN_MIRROR=mirrors.aliyun.com
+ARG NODESOURCE_BASE_URL=https://deb.nodesource.com
+ARG NLTK_INDEX_XML_URL=https://cdn.jsdelivr.net/gh/nltk/nltk_data@gh-pages/index.xml
+ARG NLTK_PACKAGE_URL_PREFIX=https://raw.githubusercontent.com/nltk/nltk_data/gh-pages/
+ARG NLTK_PACKAGE_URL_REPLACEMENT=https://cdn.jsdelivr.net/gh/nltk/nltk_data@gh-pages/
 RUN groupadd -r -g ${dify_uid} dify && \
     useradd -r -u ${dify_uid} -g ${dify_uid} -s /bin/bash dify && \
     chown -R dify:dify /app
 
 RUN \
-    apt-get update \
+    set -eux \
+    && if [ "${APT_DEBIAN_MIRROR}" != "deb.debian.org" ]; then \
+        sed -i "s@deb.debian.org@${APT_DEBIAN_MIRROR}@g" /etc/apt/sources.list.d/debian.sources; \
+    fi \
+    && apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
         gnupg \
     && mkdir -p /etc/apt/keyrings \
-    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key -o /tmp/nodesource.gpg \
+    && curl -fsSL "${NODESOURCE_BASE_URL}/gpgkey/nodesource-repo.gpg.key" -o /tmp/nodesource.gpg \
     && gpg --show-keys --with-colons /tmp/nodesource.gpg \
         | awk -F: '/^fpr:/ {print $10}' \
         | grep -Fx "${NODESOURCE_KEY_FPR}" \
     && gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg /tmp/nodesource.gpg \
     && rm -f /tmp/nodesource.gpg \
-    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_MAJOR}.x nodistro main" \
+    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] ${NODESOURCE_BASE_URL}/node_${NODE_MAJOR}.x nodistro main" \
         > /etc/apt/sources.list.d/nodesource.list \
     && apt-get update \
     # Install dependencies
@@ -95,9 +111,15 @@ ENV VIRTUAL_ENV=/app/api/.venv
 COPY --from=packages --chown=dify:dify ${VIRTUAL_ENV} ${VIRTUAL_ENV}
 ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
 
-# Download nltk data
+# Download nltk data (NLTK_* build args above; patches nltk.download for unstructured)
+COPY docker/bootstrap_nltk_mirror.py /tmp/bootstrap_nltk_mirror.py
 RUN mkdir -p /usr/local/share/nltk_data \
-    && NLTK_DATA=/usr/local/share/nltk_data python -c "import nltk; from unstructured.nlp.tokenize import download_nltk_packages; nltk.download('punkt'); nltk.download('averaged_perceptron_tagger'); nltk.download('stopwords'); download_nltk_packages()" \
+    && NLTK_DATA=/usr/local/share/nltk_data \
+        NLTK_INDEX_XML_URL="${NLTK_INDEX_XML_URL}" \
+        NLTK_PACKAGE_URL_PREFIX="${NLTK_PACKAGE_URL_PREFIX}" \
+        NLTK_PACKAGE_URL_REPLACEMENT="${NLTK_PACKAGE_URL_REPLACEMENT}" \
+        python /tmp/bootstrap_nltk_mirror.py \
+    && rm -f /tmp/bootstrap_nltk_mirror.py \
     && chmod -R 755 /usr/local/share/nltk_data
 
 ENV TIKTOKEN_CACHE_DIR=/app/api/.tiktoken_cache

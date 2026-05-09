@@ -5,6 +5,7 @@ from typing import Any, Union
 from pydantic import AliasChoices, BaseModel, Field, field_validator
 
 from core.entities.parameter_entities import CommonParameterType
+from core.model_runtime.entities.provider_entities import FormShowOnObject
 from core.tools.entities.common_entities import I18nObject
 
 
@@ -13,6 +14,8 @@ class PluginParameterOption(BaseModel):
     label: I18nObject = Field(..., description="The label of the option")
     icon: str | None = Field(default=None, description="The icon of the option, can be a url or a base64 encoded image")
     children: list["PluginParameterOption"] = Field(default_factory=list, description="The child options of the option")
+    show_on: list[FormShowOnObject] = Field(
+        default_factory=list, description="Show this option when all conditions match")
 
     @field_validator("value", mode="before")
     @classmethod
@@ -90,6 +93,10 @@ class PluginParameter(BaseModel):
     max: Union[float, int] | None = None
     precision: int | None = None
     options: list[PluginParameterOption] = Field(default_factory=list)
+    show_on: list[FormShowOnObject] = Field(
+        default_factory=list,
+        description="Show this parameter when all conditions match sibling parameter values",
+    )
 
     @field_validator("options", mode="before")
     @classmethod
