@@ -13,7 +13,8 @@ import { VarType } from '@/app/components/workflow/types'
 import { VarKindType } from '../types'
 
 type FormInputSchema = CredentialFormSchema & Partial<{
-  _type: FormTypeEnum
+  /** Declarative plugin type from YAML/API; may not match `FormTypeEnum` until normalized (e.g. `datepicker`). */
+  _type: FormTypeEnum | string
   multiple: boolean | string | number
   options: FormOption[]
   placeholder: TypeWithI18N

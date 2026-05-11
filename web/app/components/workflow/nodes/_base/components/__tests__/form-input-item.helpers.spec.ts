@@ -21,7 +21,7 @@ import {
 
 const createSchema = (
   overrides: Partial<CredentialFormSchema & {
-    _type?: FormTypeEnum
+    _type?: FormTypeEnum | string
     multiple?: boolean
     options?: FormOption[]
   }> = {},
@@ -34,7 +34,7 @@ const createSchema = (
   variable: 'field',
   ...overrides,
 }) as CredentialFormSchema & {
-  _type?: FormTypeEnum
+  _type?: FormTypeEnum | string
   multiple?: boolean
   options?: FormOption[]
 }
