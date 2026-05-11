@@ -16,6 +16,7 @@ import {
   hasOptionIcon,
   mapSelectItems,
   normalizeVariableSelectorValue,
+  toolDeclarativeTypeMatches,
 } from '../form-input-item.helpers'
 
 const createSchema = (
@@ -49,6 +50,16 @@ const createOption = (
 })
 
 describe('form-input-item helpers', () => {
+  it('should match declarative date-picker from raw _type when form type lags', () => {
+    expect(toolDeclarativeTypeMatches({ type: FormTypeEnum.textInput, _type: 'datepicker' }, 'date-picker')).toBe(true)
+    const state = getFormInputState(
+      createSchema({ type: FormTypeEnum.textInput, _type: 'datepicker' }),
+      { type: VarKindType.mixed, value: '' },
+    )
+    expect(state.isDatePicker).toBe(true)
+    expect(state.isString).toBe(false)
+  })
+
   it('should derive field state and target var type', () => {
     const numberState = getFormInputState(
       createSchema({ type: FormTypeEnum.textNumber }),
@@ -62,6 +73,20 @@ describe('form-input-item helpers', () => {
     expect(numberState.isNumber).toBe(true)
     expect(numberState.showTypeSwitch).toBe(true)
     expect(getTargetVarType(numberState)).toBe(VarType.number)
+    const dateState = getFormInputState(
+      createSchema({ type: FormTypeEnum.date }),
+      { type: VarKindType.constant, value: '2024-01-02' },
+    )
+    expect(dateState.isDate).toBe(true)
+    expect(dateState.showTypeSwitch).toBe(true)
+    expect(getTargetVarType(dateState)).toBe(VarType.string)
+    expect(getVarKindType(dateState)).toBe(VarKindType.constant)
+    const datePickerState = getFormInputState(
+      createSchema({ type: FormTypeEnum.datePicker }),
+      { type: VarKindType.constant, value: '2024-03-04' },
+    )
+    expect(datePickerState.isDatePicker).toBe(true)
+    expect(getVarKindType(datePickerState)).toBe(VarKindType.constant)
     expect(filesState.isFile).toBe(true)
     expect(filesState.showVariableSelector).toBe(true)
     expect(getTargetVarType(filesState)).toBe(VarType.arrayFile)

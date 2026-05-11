@@ -27,12 +27,17 @@ import AppSelector from '@/app/components/plugins/plugin-detail-panel/app-select
 import ModelParameterModal from '@/app/components/plugins/plugin-detail-panel/model-selector'
 import CodeEditor from '@/app/components/workflow/nodes/_base/components/editor/code-editor'
 import FormInputBoolean from '@/app/components/workflow/nodes/_base/components/form-input-boolean'
+import {
+  toolDeclarativeTypeMatches,
+} from '@/app/components/workflow/nodes/_base/components/form-input-item.helpers'
 import FormInputTypeSwitch from '@/app/components/workflow/nodes/_base/components/form-input-type-switch'
 import VarReferencePicker from '@/app/components/workflow/nodes/_base/components/variable/var-reference-picker'
 import { CodeLanguage } from '@/app/components/workflow/nodes/code/types'
 import MixedVariableTextInput from '@/app/components/workflow/nodes/tool/components/mixed-variable-text-input'
+import ToolDateRangePicker from '@/app/components/workflow/nodes/tool/components/tool-date-range-picker'
 import { VarType as VarKindType } from '@/app/components/workflow/nodes/tool/types'
 import { VarType } from '@/app/components/workflow/types'
+import { useAppContext } from '@/context/app-context'
 import { cn } from '@/utils/classnames'
 import {
   isReasoningConfigShowOnSatisfied,
@@ -59,13 +64,25 @@ function coerceReasoningScalarDefault(schema: ToolFormSchema): unknown {
       return raw
     return ''
   }
+  if (toolDeclarativeTypeMatches(schema, 'date-picker')) {
+    if (typeof raw === 'string')
+      return raw
+    if (typeof raw === 'object' && raw !== null && !Array.isArray(raw))
+      return JSON.stringify(raw)
+    return ''
+  }
+  if (toolDeclarativeTypeMatches(schema, 'date')) {
+    if (typeof raw === 'string')
+      return raw
+    return ''
+  }
   return raw ?? null
 }
 
 function getReasoningVarKindType(type: string): VarKindType | undefined {
   if (type === FormTypeEnum.file || type === FormTypeEnum.files)
     return VarKindType.variable
-  if (type === FormTypeEnum.select || type === FormTypeEnum.checkbox || type === FormTypeEnum.textNumber || type === FormTypeEnum.array || type === FormTypeEnum.object)
+  if (type === FormTypeEnum.select || type === FormTypeEnum.checkbox || type === FormTypeEnum.textNumber || type === FormTypeEnum.array || type === FormTypeEnum.object || type === FormTypeEnum.date || type === FormTypeEnum.datePicker)
     return VarKindType.constant
   if (type === FormTypeEnum.textInput || type === FormTypeEnum.secretInput)
     return VarKindType.mixed
@@ -90,6 +107,8 @@ const ReasoningConfigForm: React.FC<Props> = ({
 }) => {
   const { t } = useTranslation()
   const language = useLanguage()
+  const { userProfile } = useAppContext()
+  const timezone = userProfile.timezone ?? 'UTC'
 
   const visibleSchemas = useMemo(
     () => schemas.filter(s => isReasoningConfigShowOnSatisfied(s.show_on, value)),
@@ -240,7 +259,9 @@ const ReasoningConfigForm: React.FC<Props> = ({
       />
     ))
     const varInput = entry.value
-    const isString = type === FormTypeEnum.textInput || type === FormTypeEnum.secretInput
+    const isDatePicker = toolDeclarativeTypeMatches(schema, 'date-picker')
+    const isDate = toolDeclarativeTypeMatches(schema, 'date') && !isDatePicker
+    const isString = (type === FormTypeEnum.textInput || type === FormTypeEnum.secretInput) && !isDatePicker && !isDate
     const isNumber = type === FormTypeEnum.textNumber
     const isObject = type === FormTypeEnum.object
     const isArray = type === FormTypeEnum.array
@@ -250,7 +271,7 @@ const ReasoningConfigForm: React.FC<Props> = ({
     const isSelect = type === FormTypeEnum.select
     const isAppSelector = type === FormTypeEnum.appSelector
     const isModelSelector = type === FormTypeEnum.modelSelector
-    const showTypeSwitch = isNumber || isObject || isArray
+    const showTypeSwitch = isNumber || isObject || isArray || isDate
     const isConstant = varInput?.type === VarKindType.constant || !varInput?.type
     const showVariableSelector = isFile || varInput?.type === VarKindType.variable
     const targetVarType = () => {
@@ -258,6 +279,8 @@ const ReasoningConfigForm: React.FC<Props> = ({
         return VarType.string
       else if (isNumber)
         return VarType.number
+      else if (isDate || isDatePicker)
+        return VarType.string
       else if (type === FormTypeEnum.files)
         return VarType.arrayFile
       else if (type === FormTypeEnum.file)
@@ -274,6 +297,8 @@ const ReasoningConfigForm: React.FC<Props> = ({
     const getFilterVar = () => {
       if (isNumber)
         return (varPayload: Var) => varPayload.type === VarType.number
+      else if (isDate)
+        return (varPayload: Var) => [VarType.string, VarType.number, VarType.secret].includes(varPayload.type)
       else if (isString)
         return (varPayload: Var) => [VarType.string, VarType.number, VarType.secret].includes(varPayload.type)
       else if (isFile)
@@ -347,6 +372,24 @@ const ReasoningConfigForm: React.FC<Props> = ({
                 onChange={e => handleValueChange(variable, type)(e.target.value)}
                 placeholder={placeholder?.[language] || placeholder?.en_US}
               />
+            )}
+            {isDate && isConstant && (
+              <Input
+                className="h-8 grow"
+                type="date"
+                value={typeof varInput?.value === 'string' ? varInput.value : ''}
+                onChange={e => handleValueChange(variable, type)(e.target.value)}
+                placeholder={placeholder?.[language] || placeholder?.en_US}
+              />
+            )}
+            {isDatePicker && varInput?.type !== VarKindType.variable && (
+              <div className="grow">
+                <ToolDateRangePicker
+                  value={varInput?.value}
+                  onChange={handleValueChange(variable, type)}
+                  timezone={timezone}
+                />
+              </div>
             )}
             {isBoolean && (
               <FormInputBoolean

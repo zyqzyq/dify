@@ -20,6 +20,32 @@ type FormInputSchema = CredentialFormSchema & Partial<{
   scope: string
 }>
 
+/** Normalize plugin / YAML parameter `type` strings for comparisons (case, underscores). */
+const normalizeDeclarativeParamType = (raw: string | undefined): string => {
+  if (!raw || typeof raw !== 'string')
+    return ''
+  return raw.trim().toLowerCase().replace(/_/g, '-')
+}
+
+/**
+ * Match tool/trigger form schema against a declarative parameter type (`date`, `date-picker`).
+ * Considers both `type` (form control) and `_type` (raw plugin type); aliases e.g. `datepicker`.
+ */
+export function toolDeclarativeTypeMatches(
+  schema: { type?: string, _type?: string },
+  expected: 'date' | 'date-picker',
+): boolean {
+  const candidates = [schema.type, schema._type].filter((v): v is string => typeof v === 'string')
+  for (const c of candidates) {
+    const n = normalizeDeclarativeParamType(c)
+    if (expected === 'date-picker' && (n === 'date-picker' || n === 'datepicker'))
+      return true
+    if (expected === 'date' && n === 'date')
+      return true
+  }
+  return false
+}
+
 type FormInputValue = ResourceVarInputs[string] | undefined
 
 type ShowOnCondition = {
@@ -64,6 +90,8 @@ type FormInputState = {
   isBoolean: boolean
   isCheckbox: boolean
   isConstant: boolean
+  isDate: boolean
+  isDatePicker: boolean
   isDynamicSelect: boolean
   isDynamicTreeSelect: boolean
   isFile: boolean
@@ -122,7 +150,9 @@ export const getFormInputState = (
     _type,
   } = schema
 
-  const isString = type === FormTypeEnum.textInput || type === FormTypeEnum.secretInput
+  const isDatePicker = toolDeclarativeTypeMatches(schema, 'date-picker')
+  const isDate = toolDeclarativeTypeMatches(schema, 'date') && !isDatePicker
+  const isString = (type === FormTypeEnum.textInput || type === FormTypeEnum.secretInput) && !isDatePicker && !isDate
   const isNumber = type === FormTypeEnum.textNumber
   const isObject = type === FormTypeEnum.object
   const isArray = type === FormTypeEnum.array
@@ -136,7 +166,7 @@ export const getFormInputState = (
   const isDynamicTreeSelect = type === FormTypeEnum.dynamicTreeSelect
   const isAppSelector = type === FormTypeEnum.appSelector
   const isModelSelector = type === FormTypeEnum.modelSelector
-  const showTypeSwitch = isNumber || isBoolean || isObject || isArray || isSelect
+  const showTypeSwitch = isNumber || isBoolean || isObject || isArray || isSelect || isDate
   const isConstant = varInput?.type === VarKindType.constant || !varInput?.type
   const showVariableSelector = isFile || varInput?.type === VarKindType.variable
   const isMultipleSelect = normalizeMultipleFlag(multiple) && (isSelect || isDynamicSelect || isDynamicTreeSelect)
@@ -148,6 +178,8 @@ export const getFormInputState = (
     isBoolean,
     isCheckbox,
     isConstant,
+    isDate,
+    isDatePicker,
     isDynamicSelect,
     isDynamicTreeSelect,
     isFile,
@@ -173,6 +205,8 @@ export const getTargetVarType = (state: FormInputState) => {
     return VarType.string
   if (state.isNumber)
     return VarType.number
+  if (state.isDate || state.isDatePicker)
+    return VarType.string
   if (state.isFile)
     return state.isFiles ? VarType.arrayFile : VarType.file
   if (state.isSelect)
@@ -191,6 +225,8 @@ export const getFilterVar = (state: FormInputState) => {
     return (varPayload: Var) => varPayload.type === VarType.number
   if (state.isString)
     return (varPayload: Var) => [VarType.string, VarType.number, VarType.secret].includes(varPayload.type)
+  if (state.isDate)
+    return (varPayload: Var) => [VarType.string, VarType.number, VarType.secret].includes(varPayload.type)
   if (state.isFile)
     return (varPayload: Var) => [VarType.file, VarType.arrayFile].includes(varPayload.type)
   if (state.isBoolean)
@@ -205,7 +241,7 @@ export const getFilterVar = (state: FormInputState) => {
 export const getVarKindType = (state: FormInputState) => {
   if (state.isFile)
     return VarKindType.variable
-  if (state.isSelect || state.isDynamicSelect || state.isDynamicTreeSelect || state.isBoolean || state.isNumber || state.isArray || state.isObject)
+  if (state.isSelect || state.isDynamicSelect || state.isDynamicTreeSelect || state.isBoolean || state.isNumber || state.isArray || state.isObject || state.isDate || state.isDatePicker)
     return VarKindType.constant
   if (state.isString)
     return VarKindType.mixed

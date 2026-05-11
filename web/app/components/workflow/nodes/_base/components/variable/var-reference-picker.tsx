@@ -47,6 +47,9 @@ import { isExceptionVariable } from '@/app/components/workflow/utils'
 import { useFetchDynamicOptions, useFetchDynamicTreeOptions } from '@/service/use-plugins'
 import { cn } from '@/utils/classnames'
 import useAvailableVarList from '../../hooks/use-available-var-list'
+import {
+  toolDeclarativeTypeMatches,
+} from '../form-input-item.helpers'
 import RemoveButton from '../remove-button'
 import ConstantField from './constant-field'
 import { getNodeInfoById, isConversationVar, isENV, isGlobalVar, isRagVariableVar, isSystemVar, removeFileVars, varTypeToStructType } from './utils'
@@ -157,7 +160,12 @@ const VarReferencePicker: FC<Props> = ({
   }, [])
 
   const [varKindType, setVarKindType] = useState<VarKindType>(defaultVarKindType)
-  const isConstant = isSupportConstantValue && varKindType === VarKindType.constant
+  const resolvedVarKindType = useMemo(() => {
+    if (isSupportConstantValue && toolDeclarativeTypeMatches(schema ?? {}, 'date-picker'))
+      return VarKindType.constant
+    return varKindType
+  }, [isSupportConstantValue, schema, varKindType])
+  const isConstant = isSupportConstantValue && resolvedVarKindType === VarKindType.constant
 
   const outputVars = useMemo(() => {
     const results = passedInAvailableVars || availableVars
@@ -262,16 +270,16 @@ const VarReferencePicker: FC<Props> = ({
         })
       }
     })
-    onChange(newValue, varKindType, varInfo)
+    onChange(newValue, resolvedVarKindType, varInfo)
     setOpen(false)
-  }, [onChange, varKindType])
+  }, [onChange, resolvedVarKindType])
 
   const handleClearVar = useCallback(() => {
-    if (varKindType === VarKindType.constant)
-      onChange('', varKindType)
+    if (resolvedVarKindType === VarKindType.constant)
+      onChange('', resolvedVarKindType)
     else
-      onChange([], varKindType)
-  }, [onChange, varKindType])
+      onChange([], resolvedVarKindType)
+  }, [onChange, resolvedVarKindType])
 
   const handleVariableJump = useCallback((nodeId: string) => {
     const currentNodeIndex = availableNodes.findIndex(node => node.id === nodeId)
@@ -524,38 +532,37 @@ const VarReferencePicker: FC<Props> = ({
                 )
               : (
                   <div ref={!isSupportConstantValue ? assignTriggerRef : null} className={cn((open || isFocus) ? 'border-gray-300' : 'border-gray-100', 'group/wrap relative flex h-8 w-full items-center', !isSupportConstantValue && 'rounded-lg bg-components-input-bg-normal p-1', isInTable && 'border-none bg-transparent', readonly && 'bg-components-input-bg-disabled')}>
-                    {isSupportConstantValue
-                      ? (
-                          <div
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setOpen(false)
-                              focusConstantInput()
-                            }}
-                            className="mr-1 flex h-full items-center space-x-1"
-                          >
-                            <TypeSelector
-                              noLeft
-                              trigger={(
-                                <div className="radius-md flex h-8 items-center bg-components-input-bg-normal px-2">
-                                  <div className="system-sm-regular mr-1 text-components-input-text-filled">{varKindTypes.find(item => item.value === varKindType)?.label}</div>
-                                  <RiArrowDownSLine className="h-4 w-4 text-text-quaternary" />
-                                </div>
-                              )}
-                              popupClassName="top-8"
-                              readonly={readonly}
-                              value={varKindType}
-                              options={varKindTypes}
-                              onChange={handleVarKindTypeChange}
-                              showChecked
-                            />
-                          </div>
-                        )
-                      : (!hasValue && (
-                          <div className="ml-1.5 mr-1">
-                            <Variable02 className={`h-4 w-4 ${readonly ? 'text-components-input-text-disabled' : 'text-components-input-text-placeholder'}`} />
-                          </div>
-                        ))}
+                    {isSupportConstantValue && !toolDeclarativeTypeMatches(schema ?? {}, 'date-picker') && (
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setOpen(false)
+                          focusConstantInput()
+                        }}
+                        className="mr-1 flex h-full items-center space-x-1"
+                      >
+                        <TypeSelector
+                          noLeft
+                          trigger={(
+                            <div className="radius-md flex h-8 items-center bg-components-input-bg-normal px-2">
+                              <div className="system-sm-regular mr-1 text-components-input-text-filled">{varKindTypes.find(item => item.value === varKindType)?.label}</div>
+                              <RiArrowDownSLine className="h-4 w-4 text-text-quaternary" />
+                            </div>
+                          )}
+                          popupClassName="top-8"
+                          readonly={readonly}
+                          value={varKindType}
+                          options={varKindTypes}
+                          onChange={handleVarKindTypeChange}
+                          showChecked
+                        />
+                      </div>
+                    )}
+                    {!isSupportConstantValue && !hasValue && (
+                      <div className="ml-1.5 mr-1">
+                        <Variable02 className={`h-4 w-4 ${readonly ? 'text-components-input-text-disabled' : 'text-components-input-text-placeholder'}`} />
+                      </div>
+                    )}
                     {isConstant
                       ? (
                           <ConstantField

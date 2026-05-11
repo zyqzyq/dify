@@ -67,15 +67,20 @@ export type ToolFormSchema = {
 }
 
 export const toType = (type: string) => {
-  switch (type) {
+  if (typeof type !== 'string')
+    return type
+  const normalized = type.trim().toLowerCase().replace(/_/g, '-')
+  switch (normalized) {
     case 'string':
       return 'text-input'
     case 'number':
       return 'number-input'
     case 'boolean':
       return 'checkbox'
+    case 'datepicker':
+      return FormTypeEnum.datePicker
     default:
-      return type
+      return normalized
   }
 }
 
@@ -177,6 +182,13 @@ const correctInitialData = (type: string, target: FormValueInput, defaultValue: 
   if (type === 'number-input') {
     if (typeof defaultValue === 'string' && defaultValue !== '')
       target.value = Number.parseFloat(defaultValue)
+  }
+
+  if (type === FormTypeEnum.date || type === FormTypeEnum.datePicker) {
+    if (typeof defaultValue === 'string')
+      target.value = defaultValue
+    if (typeof defaultValue === 'object' && defaultValue !== null && !Array.isArray(defaultValue))
+      target.value = JSON.stringify(defaultValue)
   }
 
   if (type === 'app-selector' || type === 'model-selector')
@@ -318,7 +330,7 @@ export const getConfiguredValue = (value: Record<string, unknown>, formSchemas: 
 const getVarKindType = (type: FormTypeEnum) => {
   if (type === FormTypeEnum.file || type === FormTypeEnum.files)
     return VarKindType.variable
-  if (type === FormTypeEnum.select || type === FormTypeEnum.checkbox || type === FormTypeEnum.textNumber)
+  if (type === FormTypeEnum.select || type === FormTypeEnum.checkbox || type === FormTypeEnum.textNumber || type === FormTypeEnum.date || type === FormTypeEnum.datePicker)
     return VarKindType.constant
   if (type === FormTypeEnum.textInput || type === FormTypeEnum.secretInput)
     return VarKindType.mixed

@@ -19,7 +19,9 @@ import { PluginCategoryEnum } from '@/app/components/plugins/types'
 import VarReferencePicker from '@/app/components/workflow/nodes/_base/components/variable/var-reference-picker'
 import useAvailableVarList from '@/app/components/workflow/nodes/_base/hooks/use-available-var-list'
 import MixedVariableTextInput from '@/app/components/workflow/nodes/tool/components/mixed-variable-text-input'
+import ToolDateRangePicker from '@/app/components/workflow/nodes/tool/components/tool-date-range-picker'
 import { VarType } from '@/app/components/workflow/types'
+import { useAppContext } from '@/context/app-context'
 import { useFetchDynamicOptions, useFetchDynamicTreeOptions } from '@/service/use-plugins'
 import { useTriggerPluginDynamicOptions } from '@/service/use-triggers'
 import { cn } from '@/utils/classnames'
@@ -92,6 +94,8 @@ const FormInputItem: FC<Props> = ({
 }) => {
   const language = useLanguage()
   const { t } = useTranslation()
+  const { userProfile } = useAppContext()
+  const timezone = userProfile.timezone ?? 'UTC'
   const [toolsOptions, setToolsOptions] = useState<FormOption[] | null>(null)
   const [isLoadingToolsOptions, setIsLoadingToolsOptions] = useState(false)
 
@@ -108,6 +112,8 @@ const FormInputItem: FC<Props> = ({
     isBoolean,
     isCheckbox,
     isConstant,
+    isDate,
+    isDatePicker,
     isDynamicSelect,
     isDynamicTreeSelect,
     isModelSelector,
@@ -342,12 +348,13 @@ const FormInputItem: FC<Props> = ({
 
   const handleValueChange = (newValue: FormInputValue) => {
     const nextType = getVarKindType(formState) ?? varInput?.type ?? VarKindType.constant
+    const nextValue = isNumber ? Number.parseFloat(String(newValue ?? '')) : newValue
     onChange({
       ...value,
       [variable]: {
         ...varInput,
         type: nextType,
-        value: isNumber ? Number.parseFloat(String(newValue ?? '')) : newValue,
+        value: nextValue,
       },
     })
   }
@@ -448,6 +455,27 @@ const FormInputItem: FC<Props> = ({
           onChange={e => handleValueChange(e.target.value)}
           placeholder={placeholder?.[language] || placeholder?.en_US}
         />
+      )}
+      {isDate && isConstant && (
+        <Input
+          className="h-8 grow"
+          type="date"
+          disabled={readOnly}
+          value={typeof varInput?.value === 'string' ? varInput.value : ''}
+          onChange={e => handleValueChange(e.target.value)}
+          placeholder={placeholder?.[language] || placeholder?.en_US}
+        />
+      )}
+      {isDatePicker && varInput?.type !== VarKindType.variable && (
+        <div className="min-w-0 grow">
+          <ToolDateRangePicker
+            value={varInput?.value}
+            onChange={handleValueChange}
+            readOnly={readOnly}
+            timezone={timezone}
+            inPanel={inPanel}
+          />
+        </div>
       )}
       {isCheckbox && isConstant && (
         <CheckboxList

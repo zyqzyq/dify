@@ -44,6 +44,7 @@ const TriggerFormItem: FC<Props> = ({
   const { name, label, type, required, tooltip, input_schema } = schema
   const showSchemaButton = type === FormTypeEnum.object || type === FormTypeEnum.array
   const showDescription = type === FormTypeEnum.textInput || type === FormTypeEnum.secretInput
+    || type === FormTypeEnum.date || type === FormTypeEnum.datePicker
   const [isShowSchema, {
     setTrue: showSchema,
     setFalse: hideSchema,
