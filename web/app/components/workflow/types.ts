@@ -5,7 +5,7 @@ import type {
   XYPosition,
 } from 'reactflow'
 import type { Plugin, PluginMeta } from '@/app/components/plugins/types'
-import type { Collection, Tool } from '@/app/components/tools/types'
+import type { Collection, Tool, ToolParameterShowOnCondition } from '@/app/components/tools/types'
 import type { BlockClassificationEnum, PluginDefaultValue } from '@/app/components/workflow/block-selector/types'
 import type {
   DefaultValueForm,
@@ -224,6 +224,7 @@ export type InputVar = {
   hide?: boolean
   isFileItem?: boolean
   json_schema?: string | Record<string, any> // for jsonObject type
+  show_on?: ToolParameterShowOnCondition[]
 } & Partial<UploadFileSetting>
 
 export type ModelConfig = {

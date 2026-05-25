@@ -1,6 +1,8 @@
 import type { NodeDefault, ToolWithProvider, Var } from '../../types'
-import type { ToolNodeType } from './types'
+import type { ToolNodeType, ToolVarInputs } from './types'
+import { isToolSettingShowOnSatisfied } from '@/app/components/plugins/plugin-detail-panel/tool-selector/utils/show-on'
 import { CollectionType } from '@/app/components/tools/types'
+import { flattenToolSettingStoredEntry } from '@/app/components/tools/utils/to-form-schema'
 import { VarType as VarKindType } from '@/app/components/workflow/nodes/tool/types'
 import { BlockEnum } from '@/app/components/workflow/types'
 import { genNodeMetaData } from '@/app/components/workflow/utils'
@@ -31,7 +33,7 @@ const nodeDefault: NodeDefault<ToolNodeType> = {
 
     if (!errorMessages) {
       toolInputsSchema.filter((field: any) => {
-        return field.required
+        return field.required && isToolSettingShowOnSatisfied(field.show_on, payload.tool_parameters)
       }).forEach((field: any) => {
         const targetVar = payload.tool_parameters[field.variable]
         if (!targetVar) {
@@ -52,8 +54,14 @@ const nodeDefault: NodeDefault<ToolNodeType> = {
     }
 
     if (!errorMessages) {
+      const toolConfigurationsVarInputs: ToolVarInputs = {}
+      Object.entries(payload.tool_configurations).forEach(([key, val]) => {
+        const normalized = flattenToolSettingStoredEntry(val)
+        if (normalized)
+          toolConfigurationsVarInputs[key] = normalized
+      })
       toolSettingSchema.filter((field: any) => {
-        return field.required
+        return field.required && isToolSettingShowOnSatisfied(field.show_on, toolConfigurationsVarInputs)
       }).forEach((field: any) => {
         const value = payload.tool_configurations[field.variable]
         if (!errorMessages && (value === undefined || value === null || value === ''))

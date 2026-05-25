@@ -221,6 +221,7 @@ const useConfig = (id: string, payload: ToolNodeType) => {
             variable: item.variable,
             type: item.type,
             required: item.required,
+            show_on: item.show_on,
           })
         })
         return formInputs
