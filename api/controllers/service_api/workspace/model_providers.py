@@ -1,6 +1,9 @@
+import uuid
+
+from flask import request
 from flask_login import current_user
 from flask_restx import Resource
-from werkzeug.exceptions import Unauthorized
+from werkzeug.exceptions import Unauthorized, BadRequest, NotFound
 
 from controllers.service_api import service_api_ns
 from controllers.service_api.wraps import validate_dataset_token
@@ -15,6 +18,20 @@ class UserWorkspacesModelProviderCredentialsApi(Resource):
     @service_api_ns.doc("get_user_workspaces_model_provider_credentials")
     @service_api_ns.doc(description="Get model provider credentials for all workspaces the current user belongs to")
     @service_api_ns.doc(
+        params={
+            "user_id": {
+                "description": "Target user ID (optional, defaults to current authenticated user)",
+                "type": "string",
+                "required": False,
+                "in": "query",
+            }
+        },
+        responses={
+            200: "Credentials retrieved successfully",
+            400: "Invalid user_id format or user not found",
+            401: "Unauthorized - invalid API token",
+        },)
+    @service_api_ns.doc(
         responses={
             200: "Credentials retrieved successfully",
             401: "Unauthorized - invalid API token",
@@ -22,9 +39,20 @@ class UserWorkspacesModelProviderCredentialsApi(Resource):
     )
     @validate_dataset_token
     def get(self, _):
-        account = current_user._get_current_object()
-        if not isinstance(account, Account):
-            raise Unauthorized("Invalid user.")
+        user_id = request.args.get("user_id")
+
+        if user_id:
+            try:
+                uuid.UUID(user_id)
+            except ValueError:
+                raise BadRequest("Invalid user_id format. Expected UUID.")
+            account = db.session.query(Account).filter(Account.id == user_id).first()
+            if not account:
+                raise BadRequest("User not found.")
+        else:
+            account = current_user._get_current_object()
+            if not isinstance(account, Account):
+                raise Unauthorized("Invalid user.")
 
         tenant_joins = db.session.query(TenantAccountJoin).where(TenantAccountJoin.account_id == account.id).all()
         tenant_ids = [tj.tenant_id for tj in tenant_joins]
