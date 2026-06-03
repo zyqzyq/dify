@@ -34,7 +34,10 @@ from .dataset import (
     metadata,
     segment,
 )
-from .workspace import models
+from .workspace import (
+    model_providers,
+    models,
+)
 
 __all__ = [
     "annotation",
@@ -50,6 +53,7 @@ __all__ = [
     "index",
     "message",
     "metadata",
+    "model_providers",
     "models",
     "segment",
     "site",

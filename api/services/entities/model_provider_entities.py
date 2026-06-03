@@ -178,3 +178,36 @@ class ModelWithProviderEntityResponse(ProviderModelWithStatusEntity):
         dump_model = model.model_dump()
         dump_model["provider"]["tenant_id"] = tenant_id
         super().__init__(**dump_model)
+
+
+class ProviderCredentialItemResponse(BaseModel):
+    """
+    Provider credential item response.
+    """
+
+    credential_id: str
+    credential_name: str
+    credentials: dict
+
+
+class ModelCredentialItemResponse(BaseModel):
+    """
+    Model credential item response.
+    """
+
+    model: str
+    model_type: ModelType
+    credential_id: str
+    credential_name: str
+    credentials: dict
+
+
+class ProviderAllCredentialsResponse(BaseModel):
+    """
+    Provider all credentials response.
+    """
+
+    provider: str
+    label: I18nObject
+    provider_credentials: list[ProviderCredentialItemResponse]
+    model_credentials: list[ModelCredentialItemResponse]

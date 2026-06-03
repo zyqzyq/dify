@@ -9,7 +9,10 @@ from services.entities.model_provider_entities import (
     CustomConfigurationResponse,
     CustomConfigurationStatus,
     DefaultModelResponse,
+    ModelCredentialItemResponse,
     ModelWithProviderEntityResponse,
+    ProviderAllCredentialsResponse,
+    ProviderCredentialItemResponse,
     ProviderResponse,
     ProviderWithModelsResponse,
     SimpleProviderEntityResponse,
@@ -126,6 +129,76 @@ class ModelProviderService:
             provider_responses.append(provider_response)
 
         return provider_responses
+
+    def get_all_credentials(self, tenant_id: str) -> list[ProviderAllCredentialsResponse]:
+        """
+        Get all provider and model credentials for the workspace.
+
+        :param tenant_id: workspace id
+        :return: list of provider credentials grouped by provider
+        """
+        provider_configurations = self.provider_manager.get_configurations(tenant_id)
+        results: list[ProviderAllCredentialsResponse] = []
+
+        for provider_configuration in provider_configurations.values():
+            if not provider_configuration.is_custom_configuration_available():
+                continue
+
+            provider_credentials: list[ProviderCredentialItemResponse] = []
+            model_credentials: list[ModelCredentialItemResponse] = []
+
+            # Provider-level credentials
+            if provider_configuration.custom_configuration.provider:
+                for cred_config in provider_configuration.custom_configuration.provider.available_credentials:
+                    try:
+                        credentials = provider_configuration.get_provider_credential(
+                            credential_id=cred_config.credential_id
+                        )
+                    except ValueError:
+                        continue
+
+                    provider_credentials.append(
+                        ProviderCredentialItemResponse(
+                            credential_id=cred_config.credential_id,
+                            credential_name=cred_config.credential_name,
+                            credentials=credentials or {},
+                        )
+                    )
+
+            # Model-level credentials
+            for model_config in provider_configuration.custom_configuration.models:
+                for cred_config in model_config.available_model_credentials:
+                    try:
+                        credential_result = provider_configuration.get_custom_model_credential(
+                            model_type=model_config.model_type,
+                            model=model_config.model,
+                            credential_id=cred_config.credential_id,
+                        )
+                    except ValueError:
+                        continue
+
+                    if credential_result:
+                        model_credentials.append(
+                            ModelCredentialItemResponse(
+                                model=model_config.model,
+                                model_type=model_config.model_type,
+                                credential_id=cred_config.credential_id,
+                                credential_name=cred_config.credential_name,
+                                credentials=credential_result.get("credentials", {}),
+                            )
+                        )
+
+            if provider_credentials or model_credentials:
+                results.append(
+                    ProviderAllCredentialsResponse(
+                        provider=provider_configuration.provider.provider,
+                        label=provider_configuration.provider.label,
+                        provider_credentials=provider_credentials,
+                        model_credentials=model_credentials,
+                    )
+                )
+
+        return results
 
     def get_models_by_provider(self, tenant_id: str, provider: str) -> list[ModelWithProviderEntityResponse]:
         """
