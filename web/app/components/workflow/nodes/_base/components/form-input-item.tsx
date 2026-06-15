@@ -138,6 +138,14 @@ const FormInputItem: FC<Props> = ({
     return { ...serialized, ...extraParams }
   }, [value, extraParams])
 
+  const isToolDynamicSelect = Boolean(
+    isDynamicSelect
+    && providerType === PluginCategoryEnum.tool,
+  )
+  const isToolDynamicTreeSelect = Boolean(
+    isDynamicTreeSelect
+    && providerType === PluginCategoryEnum.tool,
+  )
   const toolDynamicSelectLazy = Boolean(
     isDynamicSelect
     && providerType === PluginCategoryEnum.tool
@@ -155,7 +163,7 @@ const FormInputItem: FC<Props> = ({
   )
   const [toolsOptionsLazyKeyTracker, setToolsOptionsLazyKeyTracker] = useState(toolsOptionsLazyResetKey)
   const shouldResetToolsOptionsForLazyLoad = providerType === PluginCategoryEnum.tool
-    && (toolDynamicSelectLazy || toolDynamicTreeLazy)
+    && (isToolDynamicSelect || isToolDynamicTreeSelect)
   if (shouldResetToolsOptionsForLazyLoad && toolsOptionsLazyResetKey !== toolsOptionsLazyKeyTracker) {
     setToolsOptionsLazyKeyTracker(toolsOptionsLazyResetKey)
     setToolsOptions(null)
@@ -250,7 +258,7 @@ const FormInputItem: FC<Props> = ({
         return
 
       if (isDynamicTreeSelect) {
-        if (providerType !== PluginCategoryEnum.tool || toolDynamicTreeLazy)
+        if (providerType !== PluginCategoryEnum.tool)
           return
 
         setIsLoadingToolsOptions(true)
@@ -271,7 +279,6 @@ const FormInputItem: FC<Props> = ({
       if (
         isDynamicSelect
         && providerType === PluginCategoryEnum.tool
-        && !toolDynamicSelectLazy
       ) {
         setIsLoadingToolsOptions(true)
         try {
@@ -292,8 +299,6 @@ const FormInputItem: FC<Props> = ({
   }, [
     isDynamicSelect,
     isDynamicTreeSelect,
-    toolDynamicSelectLazy,
-    toolDynamicTreeLazy,
     currentTool,
     currentProvider,
     currentTool?.name,
