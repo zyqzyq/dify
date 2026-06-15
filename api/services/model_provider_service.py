@@ -136,12 +136,18 @@ class ModelProviderService:
 
         return provider_responses
 
-    def get_all_credentials(self, tenant_id: str) -> list[ProviderAllCredentialsResponse]:
+    def get_all_credentials(
+        self, tenant_id: str, model_name: str | None = None
+    ) -> list[ProviderAllCredentialsResponse]:
         """
         Get all provider and model credentials for the workspace.
 
         :param tenant_id: workspace id
+        :param model_name: exact model name used to filter model-level credentials
         :return: list of provider credentials grouped by provider
+
+        Provider-level credentials are always returned because they are shared by models and do not
+        carry a model name. When ``model_name`` is set, only matching model-level credentials are read.
         """
         provider_configurations = self.provider_manager.get_configurations(tenant_id)
         results: list[ProviderAllCredentialsResponse] = []
@@ -197,6 +203,9 @@ class ModelProviderService:
 
             # Model-level credentials (plain text, no obfuscation)
             for model_config in provider_configuration.custom_configuration.models:
+                if model_name is not None and model_config.model != model_name:
+                    continue
+
                 model_credential_form_schemas = (
                     provider_configuration.provider.model_credential_schema.credential_form_schemas
                     if provider_configuration.provider.model_credential_schema
