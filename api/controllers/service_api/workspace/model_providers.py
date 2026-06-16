@@ -121,6 +121,12 @@ class WorkspaceModelProviderCredentialsApi(Resource):
                 "required": False,
                 "in": "query",
             },
+            "model_type": {
+                "description": "Optional exact model type used to filter model-level credentials",
+                "type": "string",
+                "required": False,
+                "in": "query",
+            },
         },
         responses={
             200: "Credentials retrieved successfully",
@@ -139,8 +145,13 @@ class WorkspaceModelProviderCredentialsApi(Resource):
         if model_name is not None:
             model_name = model_name.strip() or None
 
+        model_type = request.args.get("model_type")
+        if model_type is not None:
+            model_type = model_type.strip() or None
+
         credentials = ModelProviderService().get_all_credentials(
             tenant_id=workspace.id,
             model_name=model_name,
+            model_type=model_type,
         )
         return jsonable_encoder({"data": credentials})

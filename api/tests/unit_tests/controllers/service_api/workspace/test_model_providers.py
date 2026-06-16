@@ -108,6 +108,61 @@ def test_workspace_credentials_passes_model_name_filter(app):
     get_all_credentials.assert_called_once_with(
         tenant_id="workspace-1",
         model_name="gpt-4o-mini",
+        model_type=None,
+    )
+    assert result == {"data": []}
+
+
+def test_workspace_credentials_passes_model_type_filter(app):
+    api = WorkspaceModelProviderCredentialsApi()
+    method = unwrap(api.get)
+    workspace = SimpleNamespace(id="workspace-1")
+
+    with (
+        app.test_request_context("/workspaces/workspace-1/model-providers/credentials?model_type=llm"),
+        patch(
+            "controllers.service_api.workspace.model_providers._get_workspace",
+            return_value=workspace,
+        ),
+        patch(
+            "controllers.service_api.workspace.model_providers.ModelProviderService.get_all_credentials",
+            return_value=[],
+        ) as get_all_credentials,
+    ):
+        result = method(api, "authenticated-workspace", workspace_id="workspace-1")
+
+    get_all_credentials.assert_called_once_with(
+        tenant_id="workspace-1",
+        model_name=None,
+        model_type="llm",
+    )
+    assert result == {"data": []}
+
+
+def test_workspace_credentials_passes_model_name_and_model_type_filters(app):
+    api = WorkspaceModelProviderCredentialsApi()
+    method = unwrap(api.get)
+    workspace = SimpleNamespace(id="workspace-1")
+
+    with (
+        app.test_request_context(
+            "/workspaces/workspace-1/model-providers/credentials?model_name=gpt-4o-mini&model_type=llm"
+        ),
+        patch(
+            "controllers.service_api.workspace.model_providers._get_workspace",
+            return_value=workspace,
+        ),
+        patch(
+            "controllers.service_api.workspace.model_providers.ModelProviderService.get_all_credentials",
+            return_value=[],
+        ) as get_all_credentials,
+    ):
+        result = method(api, "authenticated-workspace", workspace_id="workspace-1")
+
+    get_all_credentials.assert_called_once_with(
+        tenant_id="workspace-1",
+        model_name="gpt-4o-mini",
+        model_type="llm",
     )
     assert result == {"data": []}
 

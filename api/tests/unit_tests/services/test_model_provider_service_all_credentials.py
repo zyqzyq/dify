@@ -303,3 +303,81 @@ def test_get_all_credentials_filters_model_credentials_by_model_name():
     assert len(result) == 1
     assert len(result[0].provider_credentials) == 1
     assert [credential.model for credential in result[0].model_credentials] == ["text-embedding-3-small"]
+
+
+def test_get_all_credentials_filters_model_credentials_by_model_type():
+    provider_config = _make_fake_provider_configuration(
+        provider_name="openai",
+        provider_available_credentials=[
+            CredentialConfiguration(credential_id="provider-cred-1", credential_name="Provider Key 1")
+        ],
+        model_available_credentials=[
+            CredentialConfiguration(credential_id="model-cred-1", credential_name="Model Key 1")
+        ],
+    )
+    provider_config.custom_configuration.models.append(
+        CustomModelConfiguration(
+            model="text-embedding-3-small",
+            model_type=ModelType.TEXT_EMBEDDING,
+            credentials={"api_key": "sk-plain-text"},
+            current_credential_id="model-cred-2",
+            current_credential_name="Model Key 2",
+            available_model_credentials=[
+                CredentialConfiguration(credential_id="model-cred-2", credential_name="Model Key 2")
+            ],
+            unadded_to_model_list=False,
+        )
+    )
+
+    class _FakeProviderManager:
+        def get_configurations(self, tenant_id: str) -> _FakeConfigurations:
+            return _FakeConfigurations(provider_config)
+
+    service = ModelProviderService()
+    service.provider_manager = _FakeProviderManager()
+
+    result = service.get_all_credentials(tenant_id="tenant-1", model_type="text-embedding")
+
+    assert len(result) == 1
+    assert len(result[0].provider_credentials) == 1
+    assert [credential.model for credential in result[0].model_credentials] == ["text-embedding-3-small"]
+
+
+def test_get_all_credentials_filters_model_credentials_by_model_name_and_model_type():
+    provider_config = _make_fake_provider_configuration(
+        provider_name="openai",
+        provider_available_credentials=[
+            CredentialConfiguration(credential_id="provider-cred-1", credential_name="Provider Key 1")
+        ],
+        model_available_credentials=[
+            CredentialConfiguration(credential_id="model-cred-1", credential_name="Model Key 1")
+        ],
+    )
+    provider_config.custom_configuration.models.append(
+        CustomModelConfiguration(
+            model="text-embedding-3-small",
+            model_type=ModelType.TEXT_EMBEDDING,
+            credentials={"api_key": "sk-plain-text"},
+            current_credential_id="model-cred-2",
+            current_credential_name="Model Key 2",
+            available_model_credentials=[
+                CredentialConfiguration(credential_id="model-cred-2", credential_name="Model Key 2")
+            ],
+            unadded_to_model_list=False,
+        )
+    )
+
+    class _FakeProviderManager:
+        def get_configurations(self, tenant_id: str) -> _FakeConfigurations:
+            return _FakeConfigurations(provider_config)
+
+    service = ModelProviderService()
+    service.provider_manager = _FakeProviderManager()
+
+    result = service.get_all_credentials(
+        tenant_id="tenant-1", model_name="text-embedding-3-small", model_type="text-embedding"
+    )
+
+    assert len(result) == 1
+    assert len(result[0].provider_credentials) == 1
+    assert [credential.model for credential in result[0].model_credentials] == ["text-embedding-3-small"]
