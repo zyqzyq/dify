@@ -251,6 +251,7 @@ class Tenant(TypeBase):
     plan: Mapped[str] = mapped_column(String(255), server_default=sa.text("'basic'"), default="basic")
     status: Mapped[str] = mapped_column(String(255), server_default=sa.text("'normal'"), default="normal")
     custom_config: Mapped[str | None] = mapped_column(LongText, default=None)
+    max_active_requests: Mapped[int | None] = mapped_column(sa.Integer, default=None)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.current_timestamp(), nullable=False, init=False
     )

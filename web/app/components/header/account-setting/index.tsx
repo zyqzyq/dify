@@ -14,6 +14,8 @@ import {
   RiMoneyDollarCircleLine,
   RiPuzzle2Fill,
   RiPuzzle2Line,
+  RiSpeedFill,
+  RiSpeedLine,
   RiTranslate2,
 } from '@remixicon/react'
 import { useEffect, useRef, useState } from 'react'
@@ -36,6 +38,7 @@ import DataSourcePage from './data-source-page-new'
 import LanguagePage from './language-page'
 import MembersPage from './members-page'
 import ModelProviderPage from './model-provider-page'
+import UsageLimitsPage from './usage-limits-page'
 
 const iconClassName = `
   w-5 h-5 mr-2
@@ -109,6 +112,12 @@ export default function AccountSetting({
         name: t('settings.apiBasedExtension', { ns: 'common' }),
         icon: <RiPuzzle2Line className={iconClassName} />,
         activeIcon: <RiPuzzle2Fill className={iconClassName} />,
+      },
+      {
+        key: ACCOUNT_SETTING_TAB.USAGE_LIMITS,
+        name: t('settings.usageLimits', { ns: 'common' }),
+        icon: <RiSpeedLine className={iconClassName} />,
+        activeIcon: <RiSpeedFill className={iconClassName} />,
       },
     )
 
@@ -243,6 +252,7 @@ export default function AccountSetting({
               {activeMenu === 'billing' && <BillingPage />}
               {activeMenu === 'data-source' && <DataSourcePage />}
               {activeMenu === 'api-based-extension' && <ApiBasedExtensionPage />}
+              {activeMenu === 'usage-limits' && <UsageLimitsPage />}
               {activeMenu === 'custom' && <CustomPage />}
               {activeMenu === 'language' && <LanguagePage />}
             </div>
