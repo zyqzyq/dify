@@ -222,8 +222,11 @@ class ToolNode(Node[ToolNodeData]):
                     continue
                 parameter_value = variable.value
             elif tool_input.type in {"mixed", "constant"}:
-                segment_group = variable_pool.convert_template(str(tool_input.value))
-                parameter_value = segment_group.log if for_log else segment_group.text
+                if tool_input.type == "constant" and isinstance(tool_input.value, list | dict):
+                    parameter_value = tool_input.value
+                else:
+                    segment_group = variable_pool.convert_template(str(tool_input.value))
+                    parameter_value = segment_group.log if for_log else segment_group.text
             else:
                 raise ToolParameterError(f"Unknown tool input type '{tool_input.type}'")
             result[parameter_name] = parameter_value

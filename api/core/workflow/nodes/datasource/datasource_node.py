@@ -237,8 +237,11 @@ class DatasourceNode(Node[DatasourceNodeData]):
                         raise DatasourceParameterError(f"Variable {datasource_input.value} does not exist")
                     parameter_value = variable.value
                 elif datasource_input.type in {"mixed", "constant"}:
-                    segment_group = variable_pool.convert_template(str(datasource_input.value))
-                    parameter_value = segment_group.log if for_log else segment_group.text
+                    if datasource_input.type == "constant" and isinstance(datasource_input.value, list | dict):
+                        parameter_value = datasource_input.value
+                    else:
+                        segment_group = variable_pool.convert_template(str(datasource_input.value))
+                        parameter_value = segment_group.log if for_log else segment_group.text
                 else:
                     raise DatasourceParameterError(f"Unknown datasource input type '{datasource_input.type}'")
                 result[parameter_name] = parameter_value

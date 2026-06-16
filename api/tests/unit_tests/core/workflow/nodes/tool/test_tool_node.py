@@ -10,11 +10,13 @@ import pytest
 
 from core.file import File, FileTransferMethod, FileType
 from core.model_runtime.entities.llm_entities import LLMUsage
-from core.tools.entities.tool_entities import ToolInvokeMessage
+from core.tools.entities.common_entities import I18nObject
+from core.tools.entities.tool_entities import ToolInvokeMessage, ToolParameter, ToolProviderType
 from core.tools.utils.message_transformer import ToolFileMessageTransformer
 from core.variables.segments import ArrayFileSegment
 from core.workflow.entities import GraphInitParams
 from core.workflow.node_events import StreamChunkEvent, StreamCompletedEvent
+from core.workflow.nodes.tool.entities import ToolNodeData
 from core.workflow.runtime import GraphRuntimeState, VariablePool
 from core.workflow.system_variable import SystemVariable
 
@@ -103,6 +105,58 @@ def _run_transform(tool_node: ToolNode, message: ToolInvokeMessage) -> tuple[lis
             tool_runtime=tool_runtime,
         )
         return _collect_events(generator)
+
+
+def _tool_parameter(name: str, parameter_type: ToolParameter.ToolParameterType) -> ToolParameter:
+    return ToolParameter(
+        name=name,
+        label=I18nObject(en_US=name, zh_Hans=name),
+        type=parameter_type,
+        form=ToolParameter.ToolParameterForm.LLM,
+        required=False,
+    )
+
+
+def _tool_node_data(tool_parameters: dict[str, dict[str, Any]]) -> ToolNodeData:
+    return ToolNodeData.model_validate(
+        {
+            "type": "tool",
+            "title": "Tool",
+            "desc": "",
+            "provider_id": "provider",
+            "provider_type": ToolProviderType.PLUGIN,
+            "provider_name": "provider",
+            "tool_name": "tool",
+            "tool_label": "tool",
+            "tool_configurations": {},
+            "tool_parameters": tool_parameters,
+        }
+    )
+
+
+def test_generate_parameters_preserves_constant_list_and_dict(tool_node: ToolNode):
+    variable_pool = VariablePool(system_variables=SystemVariable(user_id="user-id"))
+    node_data = _tool_node_data(
+        {
+            "multi_select": {"type": "constant", "value": ["123"]},
+            "date_range": {"type": "constant", "value": {"start": "2026-06-16", "end": "2026-06-17"}},
+        }
+    )
+    tool_parameters = [
+        _tool_parameter("multi_select", ToolParameter.ToolParameterType.SELECT),
+        _tool_parameter("date_range", ToolParameter.ToolParameterType.DATE_PICKER),
+    ]
+
+    result = tool_node._generate_parameters(
+        tool_parameters=tool_parameters,
+        variable_pool=variable_pool,
+        node_data=node_data,
+    )
+
+    assert result == {
+        "multi_select": ["123"],
+        "date_range": {"start": "2026-06-16", "end": "2026-06-17"},
+    }
 
 
 def test_link_messages_with_file_populate_files_output(tool_node: ToolNode):
