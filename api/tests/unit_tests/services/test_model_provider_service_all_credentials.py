@@ -6,7 +6,7 @@ import pytest
 from core.entities.provider_entities import CredentialConfiguration, CustomModelConfiguration
 from core.model_runtime.entities.common_entities import I18nObject
 from core.model_runtime.entities.model_entities import ModelType
-from core.model_runtime.entities.provider_entities import ConfigurateMethod
+from core.model_runtime.entities.provider_entities import ConfigurateMethod, CredentialFormSchema, FormType
 from models.provider import ProviderType
 from services.model_provider_service import ModelProviderService
 
@@ -24,6 +24,7 @@ def _make_fake_provider_configuration(
     has_custom_config: bool = True,
     provider_available_credentials: list[CredentialConfiguration] | None = None,
     model_available_credentials: list[CredentialConfiguration] | None = None,
+    model_credential_form_schemas: list[CredentialFormSchema] | None = None,
     provider_credentials: dict | None = None,
     model_credentials: dict | None = None,
 ):
@@ -38,7 +39,9 @@ def _make_fake_provider_configuration(
         supported_model_types=[ModelType.LLM],
         configurate_methods=[ConfigurateMethod.CUSTOMIZABLE_MODEL],
         provider_credential_schema=None,
-        model_credential_schema=None,
+        model_credential_schema=types.SimpleNamespace(credential_form_schemas=model_credential_form_schemas)
+        if model_credential_form_schemas is not None
+        else None,
     )
 
     custom_model = CustomModelConfiguration(
@@ -99,10 +102,14 @@ def mock_credential_queries():
         "provider-cred-1": types.SimpleNamespace(encrypted_config='{"api_key": "******abcd"}'),
         "model-cred-1": types.SimpleNamespace(encrypted_config='{"api_key": "******efgh"}'),
         "model-cred-2": types.SimpleNamespace(encrypted_config='{"api_key": "******ijkl"}'),
+        "model-cred-no-api-key": types.SimpleNamespace(encrypted_config='{"base_url": "https://example.com"}'),
     }
 
     def execute(statement):
-        credential_id = next((value for value in statement.compile().params.values() if value in records), None)
+        credential_id = next(
+            (value for value in statement.compile().params.values() if isinstance(value, str) and value in records),
+            None,
+        )
         result = MagicMock()
         result.scalar_one_or_none.return_value = records.get(credential_id)
         return result
@@ -139,10 +146,7 @@ def test_get_all_credentials_returns_provider_and_model_credentials(
 
     assert len(result) == 1
     assert result[0].provider == "openai"
-    assert len(result[0].provider_credentials) == 1
-    assert result[0].provider_credentials[0].credential_id == "provider-cred-1"
-    assert result[0].provider_credentials[0].credential_name == "Provider Key 1"
-    assert result[0].provider_credentials[0].credentials == {"api_key": "******abcd"}
+    assert not hasattr(result[0], "provider_credentials")
 
     assert len(result[0].model_credentials) == 1
     assert result[0].model_credentials[0].credential_id == "model-cred-1"
@@ -152,12 +156,81 @@ def test_get_all_credentials_returns_provider_and_model_credentials(
     assert result[0].model_credentials[0].credentials == {"api_key": "******efgh"}
 
 
+def test_get_all_credentials_matches_credential_provider_name_aliases():
+    provider_config = _make_fake_provider_configuration(
+        provider_name="langgenius/openai/openai",
+        provider_available_credentials=[
+            CredentialConfiguration(credential_id="provider-cred-1", credential_name="Provider Key 1")
+        ],
+        model_available_credentials=[
+            CredentialConfiguration(credential_id="model-cred-1", credential_name="Model Key 1")
+        ],
+    )
+
+    class _FakeProviderManager:
+        def get_configurations(self, tenant_id: str) -> _FakeConfigurations:
+            return _FakeConfigurations(provider_config)
+
+    def execute(statement):
+        params = statement.compile().params
+        provider_name_params = [value for key, value in params.items() if "provider_name" in key]
+        assert ["langgenius/openai/openai", "openai"] in provider_name_params
+
+        result = MagicMock()
+        if "model-cred-1" in params.values():
+            result.scalar_one_or_none.return_value = types.SimpleNamespace(encrypted_config='{"api_key": "sk-model"}')
+        else:
+            result.scalar_one_or_none.return_value = None
+        return result
+
+    service = ModelProviderService()
+    service.provider_manager = _FakeProviderManager()
+
+    with patch("services.model_provider_service.db.session.execute", side_effect=execute):
+        result = service.get_all_credentials(tenant_id="tenant-1")
+
+    assert result[0].model_credentials[0].credentials == {"api_key": "sk-model"}
+
+
+def test_get_all_credentials_returns_api_key_key_when_model_credential_value_is_missing():
+    provider_config = _make_fake_provider_configuration(
+        provider_name="openai",
+        model_available_credentials=[
+            CredentialConfiguration(credential_id="model-cred-no-api-key", credential_name="Model Key 1")
+        ],
+        model_credential_form_schemas=[
+            CredentialFormSchema(
+                variable="api_key",
+                label=I18nObject(en_US="API Key"),
+                type=FormType.SECRET_INPUT,
+            )
+        ],
+    )
+
+    class _FakeProviderManager:
+        def get_configurations(self, tenant_id: str) -> _FakeConfigurations:
+            return _FakeConfigurations(provider_config)
+
+    service = ModelProviderService()
+    service.provider_manager = _FakeProviderManager()
+
+    result = service.get_all_credentials(tenant_id="tenant-1")
+
+    assert result[0].model_credentials[0].credentials == {
+        "api_key": None,
+        "base_url": "https://example.com",
+    }
+
+
 def test_get_all_credentials_skips_providers_without_custom_config():
     configured = _make_fake_provider_configuration(
         provider_name="openai",
         has_custom_config=True,
         provider_available_credentials=[
             CredentialConfiguration(credential_id="provider-cred-1", credential_name="Provider Key 1")
+        ],
+        model_available_credentials=[
+            CredentialConfiguration(credential_id="model-cred-1", credential_name="Model Key 1")
         ],
     )
     unconfigured = _make_fake_provider_configuration(
@@ -261,8 +334,6 @@ def test_get_all_credentials_skips_missing_credentials_gracefully():
     result = svc.get_all_credentials(tenant_id="tenant-1")
 
     assert len(result) == 1
-    assert len(result[0].provider_credentials) == 1
-    assert result[0].provider_credentials[0].credential_id == "provider-cred-1"
     assert len(result[0].model_credentials) == 1
     assert result[0].model_credentials[0].credential_id == "model-cred-1"
 
@@ -301,7 +372,6 @@ def test_get_all_credentials_filters_model_credentials_by_model_name():
     result = service.get_all_credentials(tenant_id="tenant-1", model_name="text-embedding-3-small")
 
     assert len(result) == 1
-    assert len(result[0].provider_credentials) == 1
     assert [credential.model for credential in result[0].model_credentials] == ["text-embedding-3-small"]
 
 
@@ -339,7 +409,6 @@ def test_get_all_credentials_filters_model_credentials_by_model_type():
     result = service.get_all_credentials(tenant_id="tenant-1", model_type="text-embedding")
 
     assert len(result) == 1
-    assert len(result[0].provider_credentials) == 1
     assert [credential.model for credential in result[0].model_credentials] == ["text-embedding-3-small"]
 
 
@@ -379,5 +448,4 @@ def test_get_all_credentials_filters_model_credentials_by_model_name_and_model_t
     )
 
     assert len(result) == 1
-    assert len(result[0].provider_credentials) == 1
     assert [credential.model for credential in result[0].model_credentials] == ["text-embedding-3-small"]

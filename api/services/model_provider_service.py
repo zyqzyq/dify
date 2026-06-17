@@ -10,7 +10,7 @@ from core.model_runtime.entities.model_entities import ModelType, ParameterRule
 from core.model_runtime.model_providers.model_provider_factory import ModelProviderFactory
 from core.provider_manager import ProviderManager
 from extensions.ext_database import db
-from models.provider import ProviderCredential, ProviderModelCredential, ProviderType
+from models.provider import ProviderModelCredential, ProviderType
 from services.entities.model_provider_entities import (
     CustomConfigurationResponse,
     CustomConfigurationStatus,
@@ -18,7 +18,6 @@ from services.entities.model_provider_entities import (
     ModelCredentialItemResponse,
     ModelWithProviderEntityResponse,
     ProviderAllCredentialsResponse,
-    ProviderCredentialItemResponse,
     ProviderResponse,
     ProviderWithModelsResponse,
     SimpleProviderEntityResponse,
@@ -136,6 +135,37 @@ class ModelProviderService:
 
         return provider_responses
 
+    @staticmethod
+    def _decode_plain_credentials(
+        tenant_id: str,
+        encrypted_config: str | None,
+        secret_variables: list[str],
+        required_keys: list[str] | None = None,
+    ) -> dict:
+        """
+        Decode and decrypt a stored credential config without obfuscating secret values.
+        """
+        credentials: dict = {}
+        if encrypted_config:
+            try:
+                loaded_credentials = json.loads(encrypted_config)
+            except JSONDecodeError:
+                loaded_credentials = {}
+            if isinstance(loaded_credentials, dict):
+                credentials = loaded_credentials
+
+        for key in secret_variables:
+            if key in credentials and credentials[key] is not None:
+                try:
+                    credentials[key] = encrypter.decrypt_token(tenant_id=tenant_id, token=credentials[key])
+                except Exception:
+                    logger.exception("Failed to decrypt credential secret variable %s", key)
+
+        for key in required_keys or []:
+            credentials.setdefault(key, None)
+
+        return credentials
+
     def get_all_credentials(
         self, tenant_id: str, model_name: str | None = None, model_type: str | None = None
     ) -> list[ProviderAllCredentialsResponse]:
@@ -145,11 +175,11 @@ class ModelProviderService:
         :param tenant_id: workspace id
         :param model_name: exact model name used to filter model-level credentials
         :param model_type: exact model type used to filter model-level credentials
-        :return: list of provider credentials grouped by provider
+        :return: list of model credentials grouped by provider
 
-        Provider-level credentials are always returned because they are shared by models and do not
-        carry a model name. When ``model_name`` or ``model_type`` is set, only matching model-level
-        credentials are read.
+        Provider-level credentials are intentionally excluded because this export is scoped to model
+        credentials. When ``model_name`` or ``model_type`` is set, only matching model-level credentials
+        are read.
         """
         provider_configurations = self.provider_manager.get_configurations(tenant_id)
         results: list[ProviderAllCredentialsResponse] = []
@@ -158,50 +188,7 @@ class ModelProviderService:
             if not provider_configuration.is_custom_configuration_available():
                 continue
 
-            provider_credentials: list[ProviderCredentialItemResponse] = []
             model_credentials: list[ModelCredentialItemResponse] = []
-
-            # Provider-level credentials (plain text, no obfuscation)
-            if provider_configuration.custom_configuration.provider:
-                provider_name = provider_configuration.provider.provider
-                credential_form_schemas = (
-                    provider_configuration.provider.provider_credential_schema.credential_form_schemas
-                    if provider_configuration.provider.provider_credential_schema
-                    else []
-                )
-                credential_secret_variables = provider_configuration.extract_secret_variables(credential_form_schemas)
-
-                for cred_config in provider_configuration.custom_configuration.provider.available_credentials:
-                    credential = db.session.execute(
-                        select(ProviderCredential).where(
-                            ProviderCredential.id == cred_config.credential_id,
-                            ProviderCredential.tenant_id == tenant_id,
-                            ProviderCredential.provider_name == provider_name,
-                        )
-                    ).scalar_one_or_none()
-
-                    if not credential or not credential.encrypted_config:
-                        continue
-
-                    try:
-                        credentials = json.loads(credential.encrypted_config)
-                    except JSONDecodeError:
-                        credentials = {}
-
-                    for key in credential_secret_variables:
-                        if key in credentials and credentials[key] is not None:
-                            try:
-                                credentials[key] = encrypter.decrypt_token(tenant_id=tenant_id, token=credentials[key])
-                            except Exception:
-                                logger.exception("Failed to decrypt credential secret variable %s", key)
-
-                    provider_credentials.append(
-                        ProviderCredentialItemResponse(
-                            credential_id=cred_config.credential_id,
-                            credential_name=cred_config.credential_name,
-                            credentials=credentials or {},
-                        )
-                    )
 
             # Model-level credentials (plain text, no obfuscation)
             for model_config in provider_configuration.custom_configuration.models:
@@ -219,32 +206,34 @@ class ModelProviderService:
                 model_credential_secret_variables = provider_configuration.extract_secret_variables(
                     model_credential_form_schemas
                 )
+                required_credential_keys = [
+                    form_schema.variable
+                    for form_schema in model_credential_form_schemas
+                    if form_schema.variable == "api_key"
+                ]
+                provider_name = provider_configuration.provider.provider
+                provider_names = ProviderManager._get_provider_names(provider_name)
 
                 for cred_config in model_config.available_model_credentials:
                     credential_record = db.session.execute(
                         select(ProviderModelCredential).where(
                             ProviderModelCredential.id == cred_config.credential_id,
                             ProviderModelCredential.tenant_id == tenant_id,
-                            ProviderModelCredential.provider_name == provider_configuration.provider.provider,
+                            ProviderModelCredential.provider_name.in_(provider_names),
                             ProviderModelCredential.model_name == model_config.model,
                             ProviderModelCredential.model_type == model_config.model_type.to_origin_model_type(),
                         )
                     ).scalar_one_or_none()
 
-                    if not credential_record or not credential_record.encrypted_config:
+                    if not credential_record:
                         continue
 
-                    try:
-                        credentials = json.loads(credential_record.encrypted_config)
-                    except JSONDecodeError:
-                        credentials = {}
-
-                    for key in model_credential_secret_variables:
-                        if key in credentials and credentials[key] is not None:
-                            try:
-                                credentials[key] = encrypter.decrypt_token(tenant_id=tenant_id, token=credentials[key])
-                            except Exception:
-                                logger.exception("Failed to decrypt model credential secret variable %s", key)
+                    credentials = self._decode_plain_credentials(
+                        tenant_id=tenant_id,
+                        encrypted_config=credential_record.encrypted_config,
+                        secret_variables=model_credential_secret_variables,
+                        required_keys=required_credential_keys,
+                    )
 
                     model_credentials.append(
                         ModelCredentialItemResponse(
@@ -256,12 +245,11 @@ class ModelProviderService:
                         )
                     )
 
-            if provider_credentials or model_credentials:
+            if model_credentials:
                 results.append(
                     ProviderAllCredentialsResponse(
                         provider=provider_configuration.provider.provider,
                         label=provider_configuration.provider.label,
-                        provider_credentials=provider_credentials,
                         model_credentials=model_credentials,
                     )
                 )

@@ -180,16 +180,6 @@ class ModelWithProviderEntityResponse(ProviderModelWithStatusEntity):
         super().__init__(**dump_model)
 
 
-class ProviderCredentialItemResponse(BaseModel):
-    """
-    Provider credential item response.
-    """
-
-    credential_id: str
-    credential_name: str
-    credentials: dict
-
-
 class ModelCredentialItemResponse(BaseModel):
     """
     Model credential item response.
@@ -209,5 +199,4 @@ class ProviderAllCredentialsResponse(BaseModel):
 
     provider: str
     label: I18nObject
-    provider_credentials: list[ProviderCredentialItemResponse]
     model_credentials: list[ModelCredentialItemResponse]
