@@ -1,22 +1,14 @@
 import type { ICurrentWorkspace } from '@/models/common'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ToastContext } from '@/app/components/base/toast'
 import { useAppContext } from '@/context/app-context'
-import { updateWorkspaceSettings } from '@/service/common'
 import UsageLimitsPage from './index'
 
 vi.mock('@/context/app-context', () => ({
   useAppContext: vi.fn(),
 }))
 
-vi.mock('@/service/common', () => ({
-  updateWorkspaceSettings: vi.fn(),
-}))
-
 const mockUseAppContext = vi.mocked(useAppContext)
-const mockUpdateWorkspaceSettings = vi.mocked(updateWorkspaceSettings)
-const mockNotify = vi.fn()
 const mockMutateCurrentWorkspace = vi.fn()
 
 const createWorkspace = (overrides: Partial<ICurrentWorkspace> = {}): ICurrentWorkspace => ({
@@ -35,20 +27,12 @@ const createWorkspace = (overrides: Partial<ICurrentWorkspace> = {}): ICurrentWo
 })
 
 const renderUsageLimitsPage = () => {
-  return render(
-    <ToastContext.Provider value={{ notify: mockNotify, close: vi.fn() }}>
-      <UsageLimitsPage />
-    </ToastContext.Provider>,
-  )
+  return render(<UsageLimitsPage />)
 }
 
 describe('UsageLimitsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockUpdateWorkspaceSettings.mockResolvedValue({
-      result: 'success',
-      tenant: createWorkspace(),
-    })
     mockUseAppContext.mockReturnValue({
       currentWorkspace: createWorkspace(),
       isCurrentWorkspaceManager: true,
@@ -57,17 +41,27 @@ describe('UsageLimitsPage', () => {
     } as unknown as ReturnType<typeof useAppContext>)
   })
 
+  // Covers the static usage limit information shown on the page.
   describe('Rendering', () => {
-    it('should render the current workspace active request limit', () => {
+    it('should render the current workspace active request limit as read-only', () => {
       renderUsageLimitsPage()
 
       expect(screen.getByText('common.usageLimits.requestConcurrency.title')).toBeInTheDocument()
-      expect(screen.getByDisplayValue('5')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('5')).toBeDisabled()
+      expect(screen.queryByRole('button', { name: 'common.operation.save' })).not.toBeInTheDocument()
     })
   })
 
+  // Ensures permissions no longer reveal an editing path on this page.
   describe('Permissions', () => {
-    it('should disable editing when the current user cannot manage the workspace', () => {
+    it('should keep the active request limit read-only when the current user can manage the workspace', () => {
+      renderUsageLimitsPage()
+
+      expect(screen.getByDisplayValue('5')).toBeDisabled()
+      expect(screen.queryByRole('button', { name: 'common.operation.save' })).not.toBeInTheDocument()
+    })
+
+    it('should keep the active request limit read-only when the current user cannot manage the workspace', () => {
       mockUseAppContext.mockReturnValue({
         currentWorkspace: createWorkspace({ role: 'normal' }),
         isCurrentWorkspaceManager: false,
@@ -78,37 +72,24 @@ describe('UsageLimitsPage', () => {
       renderUsageLimitsPage()
 
       expect(screen.getByDisplayValue('5')).toBeDisabled()
-      expect(screen.getByRole('button', { name: 'common.operation.save' })).toBeDisabled()
+      expect(screen.queryByRole('button', { name: 'common.operation.save' })).not.toBeInTheDocument()
     })
   })
 
-  describe('Saving', () => {
-    it('should save max active requests with the current workspace name', async () => {
+  // Validates display fallback for unset backend values.
+  describe('Edge Cases', () => {
+    it('should display zero when the workspace active request limit is unset', () => {
+      mockUseAppContext.mockReturnValue({
+        currentWorkspace: createWorkspace({ max_active_requests: null }),
+        isCurrentWorkspaceManager: true,
+        isValidatingCurrentWorkspace: false,
+        mutateCurrentWorkspace: mockMutateCurrentWorkspace,
+      } as unknown as ReturnType<typeof useAppContext>)
+
       renderUsageLimitsPage()
 
-      fireEvent.change(screen.getByDisplayValue('5'), { target: { value: '12' } })
-      fireEvent.click(screen.getByRole('button', { name: 'common.operation.save' }))
-
-      await waitFor(() => {
-        expect(mockUpdateWorkspaceSettings).toHaveBeenCalledWith({
-          name: 'Test Workspace',
-          max_active_requests: 12,
-        })
-      })
-      expect(mockMutateCurrentWorkspace).toHaveBeenCalled()
-      expect(mockNotify).toHaveBeenCalledWith({
-        type: 'success',
-        message: 'common.actionMsg.modifiedSuccessfully',
-      })
-    })
-
-    it('should reject negative values before saving', () => {
-      renderUsageLimitsPage()
-
-      fireEvent.change(screen.getByDisplayValue('5'), { target: { value: '-1' } })
-
-      expect(screen.getByRole('button', { name: 'common.operation.save' })).toBeDisabled()
-      expect(mockUpdateWorkspaceSettings).not.toHaveBeenCalled()
+      expect(screen.getByDisplayValue('0')).toBeDisabled()
+      expect(screen.queryByRole('button', { name: 'common.operation.save' })).not.toBeInTheDocument()
     })
   })
 })
