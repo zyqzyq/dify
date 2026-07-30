@@ -1,6 +1,6 @@
 import type { CredentialFormSchema } from '@/app/components/header/account-setting/model-provider-page/declarations'
 import type { ToolVarInputs } from '@/app/components/workflow/nodes/tool/types'
-import { render } from '@testing-library/react'
+import { render, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { FormTypeEnum } from '@/app/components/header/account-setting/model-provider-page/declarations'
 import { VarKindType } from '@/app/components/workflow/nodes/_base/types'
@@ -119,6 +119,55 @@ describe('ToolForm show_on visibility', () => {
     )
 
     expect(onChange).toHaveBeenCalled()
+    const patched = onChange.mock.calls.at(-1)?.[0] as ToolVarInputs
+    expect(patched.extra).toEqual({
+      type: VarKindType.mixed,
+      value: 'reset-default',
+    })
+  })
+
+  it('should reset dependent fields when reset_on_change sibling changes while field stays visible', async () => {
+    const onChange = vi.fn()
+    const schema: CredentialFormSchema[] = [
+      textSchema({ name: 'mode', variable: 'mode', default: 'free' }),
+      textSchema({
+        name: 'extra',
+        variable: 'extra',
+        default: 'reset-default',
+        reset_on_change: ['mode'],
+      } as Partial<CredentialFormSchema>),
+    ]
+    const initialValue: ToolVarInputs = {
+      mode: { type: VarKindType.constant, value: 'free' },
+      extra: { type: VarKindType.mixed, value: 'edited' },
+    }
+
+    const { rerender } = render(
+      <ToolForm
+        readOnly={false}
+        nodeId="n1"
+        schema={schema}
+        value={initialValue}
+        onChange={onChange}
+      />,
+    )
+
+    rerender(
+      <ToolForm
+        readOnly={false}
+        nodeId="n1"
+        schema={schema}
+        value={{
+          mode: { type: VarKindType.constant, value: 'pro' },
+          extra: { type: VarKindType.mixed, value: 'edited' },
+        }}
+        onChange={onChange}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalled()
+    })
     const patched = onChange.mock.calls.at(-1)?.[0] as ToolVarInputs
     expect(patched.extra).toEqual({
       type: VarKindType.mixed,

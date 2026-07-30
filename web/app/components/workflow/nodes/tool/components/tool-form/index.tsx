@@ -9,10 +9,14 @@ import { isToolSettingShowOnSatisfied } from '@/app/components/plugins/plugin-de
 import { resetToolSettingFieldValue } from '@/app/components/tools/utils/to-form-schema'
 import ToolFormItem from './item'
 
+type ResettableToolSchema = CredentialFormSchema & {
+  reset_on_change?: string[]
+}
+
 type Props = {
   readOnly: boolean
   nodeId: string
-  schema: CredentialFormSchema[]
+  schema: ResettableToolSchema[]
   value: ToolVarInputs
   onChange: (value: ToolVarInputs) => void
   onOpen?: (index: number) => void
@@ -44,9 +48,11 @@ const ToolForm: FC<Props> = ({
 
   const schemaVarsKey = useMemo(() => schema.map(s => s.variable).join('\0'), [schema])
   const prevVisibleVarsRef = useRef<Set<string> | null>(null)
+  const prevValueRef = useRef<ToolVarInputs | null>(null)
 
   useEffect(() => {
     prevVisibleVarsRef.current = null
+    prevValueRef.current = null
   }, [schemaVarsKey])
 
   useEffect(() => {
@@ -68,6 +74,36 @@ const ToolForm: FC<Props> = ({
     if (Object.keys(patch).length > 0)
       onChange({ ...value, ...patch } as ToolVarInputs)
   }, [visibleSchemas, schema, schemaVarsKey, value, onChange])
+
+  useEffect(() => {
+    if (prevValueRef.current === null) {
+      prevValueRef.current = value
+      return
+    }
+
+    const changedVariables = new Set<string>()
+    const prevValue = prevValueRef.current
+    for (const variable of Object.keys(value)) {
+      if (JSON.stringify(prevValue[variable]) !== JSON.stringify(value[variable]))
+        changedVariables.add(variable)
+    }
+    prevValueRef.current = value
+
+    if (!changedVariables.size)
+      return
+
+    const patch: Partial<ToolVarInputs> = {}
+    for (const s of schema) {
+      const resetOnChange = s.reset_on_change ?? []
+      if (!resetOnChange.length || changedVariables.has(s.variable))
+        continue
+      if (resetOnChange.some(variable => changedVariables.has(variable)))
+        patch[s.variable] = resetToolSettingFieldValue(s)
+    }
+
+    if (Object.keys(patch).length > 0)
+      onChange({ ...value, ...patch } as ToolVarInputs)
+  }, [schema, value, onChange])
 
   return (
     <div className="space-y-1">

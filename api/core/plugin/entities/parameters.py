@@ -99,6 +99,10 @@ class PluginParameter(BaseModel):
         default_factory=list,
         description="Show this parameter when all conditions match sibling parameter values",
     )
+    reset_on_change: list[str] = Field(
+        default_factory=list,
+        description="Reset this parameter to its default value when any listed sibling parameter changes",
+    )
 
     @field_validator("options", mode="before")
     @classmethod

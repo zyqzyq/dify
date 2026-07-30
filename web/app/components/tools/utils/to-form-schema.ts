@@ -53,6 +53,7 @@ export type ToolFormSchema = {
   default?: string
   tooltip?: TypeWithI18N
   show_on: ToolParameterShowOnCondition[]
+  reset_on_change?: string[]
   options?: ToolFormOption[]
   placeholder?: TypeWithI18N
   min?: number
@@ -109,6 +110,7 @@ export const toolParametersToFormSchemas = (parameters: ToolParameter[]): ToolFo
       type: toType(parameter.type),
       _type: parameter.type,
       show_on: parameter.show_on ?? [],
+      reset_on_change: parameter.reset_on_change ?? [],
       options: parameter.options?.map((option) => {
         return {
           ...option,

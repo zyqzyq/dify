@@ -88,6 +88,19 @@ function getReasoningVarKindType(type: string): VarKindType | undefined {
     return VarKindType.mixed
 }
 
+function resetReasoningConfigEntry(schema: ToolFormSchema, prevEntry?: ReasoningConfigValue[string]): ReasoningConfigValue[string] {
+  return {
+    auto: prevEntry?.auto ?? 0,
+    value:
+      prevEntry?.auto === 1
+        ? null
+        : {
+            type: getReasoningVarKindType(schema.type),
+            value: coerceReasoningScalarDefault(schema),
+          },
+  }
+}
+
 type Props = {
   value: ReasoningConfigValue
   onChange: (val: ReasoningConfigValue) => void
@@ -117,9 +130,11 @@ const ReasoningConfigForm: React.FC<Props> = ({
 
   const schemasVarsKey = useMemo(() => schemas.map(s => s.variable).join('\0'), [schemas])
   const prevVisibleVarsRef = useRef<Set<string> | null>(null)
+  const prevValueRef = useRef<ReasoningConfigValue | null>(null)
 
   useEffect(() => {
     prevVisibleVarsRef.current = null
+    prevValueRef.current = null
   }, [schemasVarsKey])
 
   useEffect(() => {
@@ -136,23 +151,45 @@ const ReasoningConfigForm: React.FC<Props> = ({
       const nowVisible = currentVisible.has(variable)
       if (wasVisible && !nowVisible) {
         patch ??= { ...value }
-        const prevEntry = value[variable]
-        patch[variable] = {
-          auto: prevEntry?.auto ?? 0,
-          value:
-            prevEntry?.auto === 1
-              ? null
-              : {
-                  type: getReasoningVarKindType(s.type),
-                  value: coerceReasoningScalarDefault(s),
-                },
-        }
+        patch[variable] = resetReasoningConfigEntry(s, value[variable])
       }
     }
     prevVisibleVarsRef.current = currentVisible
     if (patch)
       onChange(patch)
   }, [visibleSchemas, schemas, schemasVarsKey, value, onChange])
+
+  useEffect(() => {
+    if (prevValueRef.current === null) {
+      prevValueRef.current = value
+      return
+    }
+
+    const changedVariables = new Set<string>()
+    const prevValue = prevValueRef.current
+    for (const variable of Object.keys(value)) {
+      if (JSON.stringify(prevValue[variable]) !== JSON.stringify(value[variable]))
+        changedVariables.add(variable)
+    }
+    prevValueRef.current = value
+
+    if (!changedVariables.size)
+      return
+
+    let patch: ReasoningConfigValue | null = null
+    for (const schema of schemas) {
+      const resetOnChange = schema.reset_on_change ?? []
+      if (!resetOnChange.length || changedVariables.has(schema.variable))
+        continue
+      if (resetOnChange.some(variable => changedVariables.has(variable))) {
+        patch ??= { ...value }
+        patch[schema.variable] = resetReasoningConfigEntry(schema, value[schema.variable])
+      }
+    }
+
+    if (patch)
+      onChange(patch)
+  }, [schemas, value, onChange])
 
   const handleAutomatic = (key: string, val: boolean, type: string) => {
     onChange({

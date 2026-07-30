@@ -106,6 +106,8 @@ export type ToolParameter = {
   }[]
   /** Plugin YAML `show_on`: AND-joined sibling param equality conditions. Empty/missing means always show. */
   show_on?: ToolParameterShowOnCondition[]
+  /** Plugin YAML `reset_on_change`: reset this parameter when any listed sibling parameter changes. */
+  reset_on_change?: string[]
   min?: number
   max?: number
 }

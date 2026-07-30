@@ -1,6 +1,6 @@
 import type { ReasoningConfigValue } from '../utils/show-on'
 import type { ToolFormSchema } from '@/app/components/tools/utils/to-form-schema'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { FormTypeEnum } from '@/app/components/header/account-setting/model-provider-page/declarations'
 import { VarType as VarKindType } from '@/app/components/workflow/nodes/tool/types'
@@ -73,5 +73,63 @@ describe('ReasoningConfigForm show_on visibility', () => {
     )
 
     expect(screen.getByText('EXTRA_ROW')).toBeInTheDocument()
+  })
+
+  it('should reset dependent parameter when reset_on_change sibling changes while row stays visible', async () => {
+    const onChange = vi.fn()
+    const modeSchema = reasoningSchema({
+      variable: 'mode',
+      name: 'mode',
+      label: { en_US: 'MODE_ROW', zh_Hans: 'MODE_ROW' },
+      default: 'false',
+    })
+    const extraSchema = reasoningSchema({
+      variable: 'extra',
+      name: 'extra',
+      label: { en_US: 'EXTRA_ROW', zh_Hans: 'EXTRA_ROW' },
+      default: 'true',
+      reset_on_change: ['mode'],
+    })
+    const initialValue: ReasoningConfigValue = {
+      mode: { auto: 0, value: { type: VarKindType.constant, value: false } },
+      extra: { auto: 0, value: { type: VarKindType.constant, value: false } },
+    }
+
+    const { rerender } = render(
+      <ReasoningConfigForm
+        value={initialValue}
+        onChange={onChange}
+        schemas={[modeSchema, extraSchema]}
+        nodeOutputVars={[]}
+        availableNodes={[]}
+        nodeId="node-1"
+      />,
+    )
+
+    rerender(
+      <ReasoningConfigForm
+        value={{
+          mode: { auto: 0, value: { type: VarKindType.constant, value: true } },
+          extra: initialValue.extra,
+        }}
+        onChange={onChange}
+        schemas={[modeSchema, extraSchema]}
+        nodeOutputVars={[]}
+        availableNodes={[]}
+        nodeId="node-1"
+      />,
+    )
+
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalled()
+    })
+    const patched = onChange.mock.calls.at(-1)?.[0] as ReasoningConfigValue
+    expect(patched.extra).toEqual({
+      auto: 0,
+      value: {
+        type: VarKindType.constant,
+        value: true,
+      },
+    })
   })
 })
