@@ -67,6 +67,8 @@ export type FormSchema = {
   help?: string | TypeWithI18N | Record<Locale, string>
   placeholder?: string | TypeWithI18N | Record<Locale, string>
   options?: FormOption[]
+  min?: number
+  max?: number
   labelClassName?: string
   fieldClassName?: string
   validators?: AnyValidators

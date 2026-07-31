@@ -373,6 +373,12 @@ const FormInputItem: FC<Props> = ({
   const handleValueChange = (newValue: FormInputValue) => {
     const nextType = getVarKindType(formState) ?? varInput?.type ?? VarKindType.constant
     const nextValue = isNumber ? Number.parseFloat(String(newValue ?? '')) : newValue
+    if (isNumber && typeof nextValue === 'number' && !Number.isNaN(nextValue)) {
+      if (typeof schema.min === 'number' && nextValue < schema.min)
+        return
+      if (typeof schema.max === 'number' && nextValue > schema.max)
+        return
+    }
     onChange({
       ...value,
       [variable]: {
@@ -478,6 +484,8 @@ const FormInputItem: FC<Props> = ({
           value={getNumberInputValue(varInput?.value)}
           onChange={e => handleValueChange(e.target.value)}
           placeholder={placeholder?.[language] || placeholder?.en_US}
+          min={schema.min}
+          max={schema.max}
         />
       )}
       {isDate && isConstant && (

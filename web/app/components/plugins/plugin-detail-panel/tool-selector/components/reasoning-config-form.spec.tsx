@@ -1,6 +1,6 @@
 import type { ReasoningConfigValue } from '../utils/show-on'
 import type { ToolFormSchema } from '@/app/components/tools/utils/to-form-schema'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { FormTypeEnum } from '@/app/components/header/account-setting/model-provider-page/declarations'
 import { VarType as VarKindType } from '@/app/components/workflow/nodes/tool/types'
@@ -25,6 +25,46 @@ function reasoningSchema(overrides: Partial<ToolFormSchema>): ToolFormSchema {
 }
 
 describe('ReasoningConfigForm show_on visibility', () => {
+  it('should apply min and max to llm number parameters and ignore out-of-range changes', () => {
+    const onChange = vi.fn()
+    const countSchema = reasoningSchema({
+      variable: 'count',
+      name: 'count',
+      label: { en_US: 'COUNT_ROW', zh_Hans: 'COUNT_ROW' },
+      type: FormTypeEnum.textNumber,
+      _type: 'number',
+      default: '5',
+      min: 1,
+      max: 10,
+    })
+    const value: ReasoningConfigValue = {
+      count: { auto: 0, value: { type: VarKindType.constant, value: 5 } },
+    }
+
+    render(
+      <ReasoningConfigForm
+        value={value}
+        onChange={onChange}
+        schemas={[countSchema]}
+        nodeOutputVars={[]}
+        availableNodes={[]}
+        nodeId="node-1"
+      />,
+    )
+
+    const input = screen.getByRole('spinbutton')
+    expect(input).toHaveAttribute('min', '1')
+    expect(input).toHaveAttribute('max', '10')
+
+    fireEvent.change(input, { target: { value: '11' } })
+    expect(onChange).not.toHaveBeenCalled()
+
+    fireEvent.change(input, { target: { value: '7' } })
+    expect(onChange).toHaveBeenCalledWith({
+      count: { auto: 0, value: { type: VarKindType.constant, value: '7' } },
+    })
+  })
+
   it('should omit dependent parameter rows until sibling conditions match', () => {
     const modeSchema = reasoningSchema({
       variable: 'mode',

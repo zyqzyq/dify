@@ -130,6 +130,8 @@ export type CredentialFormSchemaBase = {
   show_on: FormShowOnObject[]
   /** Plugin YAML `reset_on_change`: reset this field when any listed sibling changes. */
   reset_on_change?: string[]
+  min?: number
+  max?: number
   url?: string
   scope?: string
   input_schema?: SchemaRoot
@@ -151,11 +153,11 @@ export type CredentialFormSchemaTextInput = CredentialFormSchemaBase & {
     type: string
   }
 }
-export type CredentialFormSchemaNumberInput = CredentialFormSchemaBase & { min?: number, max?: number, placeholder?: TypeWithI18N }
+export type CredentialFormSchemaNumberInput = CredentialFormSchemaBase & { placeholder?: TypeWithI18N }
 export type CredentialFormSchemaSelect = CredentialFormSchemaBase & { options: FormOption[], placeholder?: TypeWithI18N }
 export type CredentialFormSchemaRadio = CredentialFormSchemaBase & { options: FormOption[] }
 export type CredentialFormSchemaSecretInput = CredentialFormSchemaBase & { placeholder?: TypeWithI18N }
-export type CredentialFormSchema = CredentialFormSchemaTextInput | CredentialFormSchemaSelect | CredentialFormSchemaRadio | CredentialFormSchemaSecretInput
+export type CredentialFormSchema = CredentialFormSchemaTextInput | CredentialFormSchemaNumberInput | CredentialFormSchemaSelect | CredentialFormSchemaRadio | CredentialFormSchemaSecretInput
 
 export type ModelItem = {
   model: string

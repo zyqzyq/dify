@@ -108,6 +108,8 @@ const BaseField = ({
     description,
     url,
     help,
+    min,
+    max,
   } = formSchema
   const disabled = propsDisabled || formSchemaDisabled
 
@@ -122,7 +124,7 @@ const BaseField = ({
     if (!results[1])
       results[1] = t('placeholder.input', { ns: 'common' })
     return results
-  }, [label, placeholder, tooltip, description, help, renderI18nObject])
+  }, [label, placeholder, tooltip, description, help, renderI18nObject, t])
 
   const watchedVariables = useMemo(() => {
     const variables = new Set<string>()
@@ -186,6 +188,22 @@ const BaseField = ({
     onChange?.(field.name, value)
   }, [field, onChange])
 
+  const handleTextInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const nextValue = e.target.value
+
+    if (formItemType === FormTypeEnum.textNumber && nextValue !== '') {
+      const numberValue = Number(nextValue)
+      if (!Number.isNaN(numberValue)) {
+        if (typeof min === 'number' && numberValue < min)
+          return
+        if (typeof max === 'number' && numberValue > max)
+          return
+      }
+    }
+
+    handleChange(nextValue)
+  }, [formItemType, handleChange, max, min])
+
   return (
     <>
       <div className={cn(fieldClassName)}>
@@ -210,14 +228,13 @@ const BaseField = ({
                 id={field.name}
                 name={field.name}
                 className={cn(inputClassName, VALIDATE_STATUS_STYLE_MAP[fieldState?.validateStatus as FormItemValidateStatusEnum]?.componentClassName)}
-                value={value || ''}
-                onChange={(e) => {
-                  handleChange(e.target.value)
-                }}
+                value={value ?? ''}
+                onChange={handleTextInputChange}
                 onBlur={field.handleBlur}
                 disabled={disabled}
                 placeholder={translatedPlaceholder}
                 {...getExtraProps(formItemType)}
+                {...(formItemType === FormTypeEnum.textNumber ? { min, max } : {})}
                 showCopyIcon={showCopy}
               />
             )

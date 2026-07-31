@@ -294,6 +294,8 @@ const ReasoningConfigForm: React.FC<Props> = ({
       input_schema,
       placeholder,
       options,
+      min,
+      max,
     } = schema
     const entry = value[variable]
     if (!entry)
@@ -421,8 +423,19 @@ const ReasoningConfigForm: React.FC<Props> = ({
                 className="h-8 grow"
                 type="number"
                 value={(varInput?.value as string | number) || ''}
-                onChange={e => handleValueChange(variable, type)(e.target.value)}
+                onChange={(e) => {
+                  const nextValue = Number(e.target.value)
+                  if (!Number.isNaN(nextValue)) {
+                    if (typeof min === 'number' && nextValue < min)
+                      return
+                    if (typeof max === 'number' && nextValue > max)
+                      return
+                  }
+                  handleValueChange(variable, type)(e.target.value)
+                }}
                 placeholder={placeholder?.[language] || placeholder?.en_US}
+                min={min}
+                max={max}
               />
             )}
             {isDate && isConstant && (
