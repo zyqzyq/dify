@@ -33,6 +33,7 @@ import {
   filterVisibleTreeOptions,
   getCheckboxListOptions,
   getCheckboxListValue,
+  getDynamicOptionsResetKey,
   getFilterVar,
   getFormInputState,
   getNumberInputValue,
@@ -49,10 +50,14 @@ import {
 } from './form-input-item.sections'
 import FormInputTypeSwitch from './form-input-type-switch'
 
+type ResettableCredentialFormSchema = CredentialFormSchema & {
+  reset_on_change?: string[]
+}
+
 type Props = {
   readOnly: boolean
   nodeId: string
-  schema: CredentialFormSchema
+  schema: ResettableCredentialFormSchema
   value: ResourceVarInputs
   onChange: (value: ResourceVarInputs) => void
   inPanel?: boolean
@@ -132,11 +137,11 @@ const FormInputItem: FC<Props> = ({
   const varInput = value[variable]
 
   const parameterValuesForDynamicOptions = useMemo(() => {
-    const serialized = serializeResourceVarInputsForDynamicOptions(value)
+    const serialized = serializeResourceVarInputsForDynamicOptions(value, variable)
     if (!extraParams || Object.keys(extraParams).length === 0)
       return serialized
     return { ...serialized, ...extraParams }
-  }, [value, extraParams])
+  }, [value, extraParams, variable])
 
   const isToolDynamicSelect = Boolean(
     isDynamicSelect
@@ -156,6 +161,10 @@ const FormInputItem: FC<Props> = ({
     && providerType === PluginCategoryEnum.tool
     && schema.dynamic_select_lazy_load === true,
   )
+  const dynamicOptionsResetKey = useMemo(
+    () => getDynamicOptionsResetKey(value, schema.reset_on_change),
+    [value, schema.reset_on_change],
+  )
 
   const toolsOptionsLazyResetKey = useMemo(
     () => `${currentTool?.name ?? ''}|${currentProvider?.name ?? ''}|${variable}`,
@@ -166,6 +175,15 @@ const FormInputItem: FC<Props> = ({
     && (isToolDynamicSelect || isToolDynamicTreeSelect)
   if (shouldResetToolsOptionsForLazyLoad && toolsOptionsLazyResetKey !== toolsOptionsLazyKeyTracker) {
     setToolsOptionsLazyKeyTracker(toolsOptionsLazyResetKey)
+    setToolsOptions(null)
+  }
+  const [toolsOptionsResetKeyTracker, setToolsOptionsResetKeyTracker] = useState(dynamicOptionsResetKey)
+  if (
+    shouldResetToolsOptionsForLazyLoad
+    && dynamicOptionsResetKey
+    && dynamicOptionsResetKey !== toolsOptionsResetKeyTracker
+  ) {
+    setToolsOptionsResetKeyTracker(dynamicOptionsResetKey)
     setToolsOptions(null)
   }
 
@@ -221,6 +239,7 @@ const FormInputItem: FC<Props> = ({
   const handleToolDynamicSelectOpen = useCallback(async (open: boolean) => {
     if (!open || !toolDynamicSelectLazy || !currentTool || !currentProvider)
       return
+    setToolsOptions(null)
     setIsLoadingToolsOptions(true)
     try {
       const data = await fetchDynamicOptions()
@@ -238,6 +257,7 @@ const FormInputItem: FC<Props> = ({
   const handleToolDynamicTreeOpen = useCallback(async (open: boolean) => {
     if (!open || !toolDynamicTreeLazy || !currentTool || !currentProvider)
       return
+    setToolsOptions(null)
     setIsLoadingToolsOptions(true)
     try {
       const data = await fetchDynamicTreeOptions()
@@ -261,6 +281,7 @@ const FormInputItem: FC<Props> = ({
         if (providerType !== PluginCategoryEnum.tool)
           return
 
+        setToolsOptions(null)
         setIsLoadingToolsOptions(true)
         try {
           const data = await fetchDynamicTreeOptions()
@@ -280,6 +301,7 @@ const FormInputItem: FC<Props> = ({
         isDynamicSelect
         && providerType === PluginCategoryEnum.tool
       ) {
+        setToolsOptions(null)
         setIsLoadingToolsOptions(true)
         try {
           const data = await fetchDynamicOptions()
@@ -305,6 +327,7 @@ const FormInputItem: FC<Props> = ({
     currentProvider?.name,
     variable,
     providerType,
+    dynamicOptionsResetKey,
     fetchDynamicOptions,
     fetchDynamicTreeOptions,
   ])

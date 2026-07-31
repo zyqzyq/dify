@@ -71,10 +71,10 @@ export type SelectItem = {
 }
 
 /** Serialized sibling parameter values for plugin dynamic-options API (`parameter_values` query). */
-export function serializeResourceVarInputsForDynamicOptions(inputs: ResourceVarInputs): Record<string, unknown> {
+export function serializeResourceVarInputsForDynamicOptions(inputs: ResourceVarInputs, excludedVariable?: string): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   for (const [key, entry] of Object.entries(inputs)) {
-    if (!entry)
+    if (!entry || key === excludedVariable || entry.value === undefined)
       continue
     if (entry.type === VarKindType.constant)
       out[key] = entry.value
@@ -82,6 +82,12 @@ export function serializeResourceVarInputsForDynamicOptions(inputs: ResourceVarI
       out[key] = { kind: entry.type, value: entry.value }
   }
   return out
+}
+
+export function getDynamicOptionsResetKey(inputs: ResourceVarInputs, resetOnChange: string[] = []): string {
+  return resetOnChange
+    .map(variable => `${variable}:${JSON.stringify(inputs[variable] ?? null)}`)
+    .join('\0')
 }
 
 type FormInputState = {

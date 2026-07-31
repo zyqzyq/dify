@@ -1,5 +1,6 @@
 import type { ToolParameter } from '../types'
 import { describe, expect, it } from 'vitest'
+import { getDynamicOptionsResetKey, serializeResourceVarInputsForDynamicOptions } from '@/app/components/workflow/nodes/_base/components/form-input-item.helpers'
 import { VarKindType } from '@/app/components/workflow/nodes/_base/types'
 import { flattenToolSettingStoredEntry, getPlainValue, toolParametersToFormSchemas } from './to-form-schema'
 
@@ -107,5 +108,39 @@ describe('flattenToolSettingStoredEntry / getPlainValue', () => {
     } as Record<string, { value: unknown }>)
     expect(plain.mode).toEqual({ type: VarKindType.constant, value: 'pro' })
     expect(plain.legacy).toEqual({ type: VarKindType.constant, value: 'free' })
+  })
+})
+
+describe('serializeResourceVarInputsForDynamicOptions', () => {
+  it('should omit the current dynamic field and undefined reset values from parameter_values', () => {
+    const serialized = serializeResourceVarInputsForDynamicOptions({
+      category: { type: VarKindType.constant, value: 'docs' },
+      channel: { type: VarKindType.constant, value: 'old-channel' },
+      reset_field: { type: VarKindType.constant, value: undefined },
+    }, 'channel')
+
+    expect(serialized).toEqual({
+      category: 'docs',
+    })
+  })
+})
+
+describe('getDynamicOptionsResetKey', () => {
+  it('should change only when reset_on_change dependency values change', () => {
+    const first = getDynamicOptionsResetKey({
+      category: { type: VarKindType.constant, value: 'docs' },
+      channel: { type: VarKindType.constant, value: 'old-channel' },
+    }, ['category'])
+    const sameDependency = getDynamicOptionsResetKey({
+      category: { type: VarKindType.constant, value: 'docs' },
+      channel: { type: VarKindType.constant, value: 'new-channel' },
+    }, ['category'])
+    const changedDependency = getDynamicOptionsResetKey({
+      category: { type: VarKindType.constant, value: 'chat' },
+      channel: { type: VarKindType.constant, value: 'new-channel' },
+    }, ['category'])
+
+    expect(sameDependency).toBe(first)
+    expect(changedDependency).not.toBe(first)
   })
 })
