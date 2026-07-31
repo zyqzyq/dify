@@ -132,4 +132,64 @@ describe('ReasoningConfigForm show_on visibility', () => {
       },
     })
   })
+
+  it('should clear dynamic-tree-select values when reset_on_change sibling changes', async () => {
+    const onChange = vi.fn()
+    const categorySchema = reasoningSchema({
+      variable: 'category',
+      name: 'category',
+      label: { en_US: 'CATEGORY_ROW', zh_Hans: 'CATEGORY_ROW' },
+      default: 'false',
+    })
+    const channelSchema = reasoningSchema({
+      variable: 'channel',
+      name: 'channel',
+      type: FormTypeEnum.dynamicTreeSelect,
+      _type: 'dynamic-tree-select',
+      label: { en_US: 'CHANNEL_ROW', zh_Hans: 'CHANNEL_ROW' },
+      default: undefined,
+      reset_on_change: ['category'],
+    })
+    const initialValue: ReasoningConfigValue = {
+      category: { auto: 0, value: { type: VarKindType.constant, value: false } },
+      channel: { auto: 0, value: { type: VarKindType.constant, value: ['old-channel'] } },
+    }
+
+    const { rerender } = render(
+      <ReasoningConfigForm
+        value={initialValue}
+        onChange={onChange}
+        schemas={[categorySchema, channelSchema]}
+        nodeOutputVars={[]}
+        availableNodes={[]}
+        nodeId="node-1"
+      />,
+    )
+
+    rerender(
+      <ReasoningConfigForm
+        value={{
+          category: { auto: 0, value: { type: VarKindType.constant, value: true } },
+          channel: initialValue.channel,
+        }}
+        onChange={onChange}
+        schemas={[categorySchema, channelSchema]}
+        nodeOutputVars={[]}
+        availableNodes={[]}
+        nodeId="node-1"
+      />,
+    )
+
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalled()
+    })
+    const patched = onChange.mock.calls.at(-1)?.[0] as ReasoningConfigValue
+    expect(patched.channel).toEqual({
+      auto: 0,
+      value: {
+        type: VarKindType.constant,
+        value: [],
+      },
+    })
+  })
 })

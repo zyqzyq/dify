@@ -35,6 +35,7 @@ export const getToolCheckParams = (
           type: item.type,
           required: item.required,
           show_on: item.show_on,
+          reset_on_change: item.reset_on_change,
         })
       })
       return formInputs

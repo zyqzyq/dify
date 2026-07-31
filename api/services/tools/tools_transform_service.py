@@ -33,6 +33,38 @@ logger = logging.getLogger(__name__)
 
 
 class ToolTransformService:
+    @staticmethod
+    def _dependency_metadata_list(value: object) -> list:
+        """Return a shallow copy when value is a real list; ignore mocks/non-lists."""
+        return list(value) if isinstance(value, list) else []
+
+    @staticmethod
+    def _merge_runtime_parameter(base_parameter: ToolParameter, runtime_parameter: ToolParameter) -> ToolParameter:
+        """
+        Overlay dynamic runtime parameter data without dropping declaration-only dependency metadata.
+
+        Runtime parameters may carry empty ``show_on`` / ``reset_on_change`` defaults from the
+        plugin daemon. Those must not wipe values that only exist on the static declaration.
+        Never mutate ``base_parameter`` or ``runtime_parameter`` in place.
+        """
+        base_show_on = ToolTransformService._dependency_metadata_list(getattr(base_parameter, "show_on", None))
+        base_reset_on_change = ToolTransformService._dependency_metadata_list(
+            getattr(base_parameter, "reset_on_change", None)
+        )
+        if not base_show_on and not base_reset_on_change:
+            return runtime_parameter
+
+        model_copy = getattr(runtime_parameter, "model_copy", None)
+        if not callable(model_copy):
+            return runtime_parameter
+
+        merged_parameter = model_copy(deep=True)
+        if base_show_on:
+            merged_parameter.show_on = base_show_on
+        if base_reset_on_change:
+            merged_parameter.reset_on_change = base_reset_on_change
+        return merged_parameter
+
     @classmethod
     def get_tool_provider_icon_url(
         cls, provider_type: str, provider_name: str, icon: str | Mapping[str, str]
@@ -378,7 +410,9 @@ class ToolTransformService:
             for base_param in base_parameters:
                 key = (base_param.name, base_param.form)
                 if key in runtime_param_map:
-                    merged_parameters.append(runtime_param_map[key])
+                    merged_parameters.append(
+                        ToolTransformService._merge_runtime_parameter(base_param, runtime_param_map[key])
+                    )
                 else:
                     merged_parameters.append(base_param)
 

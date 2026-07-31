@@ -1,5 +1,6 @@
 from unittest.mock import Mock
 
+from core.model_runtime.entities.provider_entities import FormShowOnObject
 from core.tools.__base.tool import Tool
 from core.tools.entities.api_entities import ToolApiEntity, ToolProviderApiEntity
 from core.tools.entities.common_entities import I18nObject
@@ -67,6 +68,54 @@ class TestToolTransformService:
         original_param = next((p for p in result.parameters if p.name == "param2"), None)
         assert original_param is not None
         assert original_param.label == "Base Param 2"  # Should be base version
+
+    def test_convert_tool_preserves_base_dependency_metadata_when_runtime_parameter_defaults_are_empty(self):
+        """Test that runtime parameter overrides do not clear static dependency metadata."""
+        base_param = ToolParameter(
+            name="channel",
+            label=I18nObject(en_US="Base Channel"),
+            type=ToolParameter.ToolParameterType.DYNAMIC_TREE_SELECT,
+            form=ToolParameter.ToolParameterForm.FORM,
+            show_on=[FormShowOnObject(variable="category", value="advanced")],
+            reset_on_change=["category"],
+            required=False,
+        )
+        runtime_param = ToolParameter.model_validate(
+            {
+                "name": "channel",
+                "label": {"en_US": "Runtime Channel"},
+                "type": "dynamic-tree-select",
+                "form": "form",
+                "show_on": [],
+                "reset_on_change": [],
+                "required": False,
+            }
+        )
+
+        mock_tool = Mock(spec=Tool)
+        mock_tool.entity = Mock()
+        mock_tool.entity.parameters = [base_param]
+        mock_tool.entity.identity = Mock()
+        mock_tool.entity.identity.author = "test_author"
+        mock_tool.entity.identity.name = "test_tool"
+        mock_tool.entity.identity.label = I18nObject(en_US="Test Tool")
+        mock_tool.entity.description = Mock()
+        mock_tool.entity.description.human = I18nObject(en_US="Test description")
+        mock_tool.entity.output_schema = {}
+        mock_tool.get_runtime_parameters.return_value = [runtime_param]
+        mock_tool.fork_tool_runtime.return_value = mock_tool
+
+        result = ToolTransformService.convert_tool_entity_to_api_entity(mock_tool, "test_tenant", None)
+
+        assert result.parameters is not None
+        assert result.parameters[0].label.en_US == "Runtime Channel"
+        assert result.parameters[0].show_on == [FormShowOnObject(variable="category", value="advanced")]
+        assert result.parameters[0].reset_on_change == ["category"]
+        # Merge must not mutate the original declaration or runtime parameter objects.
+        assert base_param.show_on == [FormShowOnObject(variable="category", value="advanced")]
+        assert base_param.reset_on_change == ["category"]
+        assert runtime_param.show_on == []
+        assert runtime_param.reset_on_change == []
 
     def test_convert_tool_with_additional_runtime_parameters(self):
         """Test that additional runtime parameters are added to the final list"""

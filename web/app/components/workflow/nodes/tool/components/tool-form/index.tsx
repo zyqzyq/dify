@@ -7,16 +7,13 @@ import type { ToolWithProvider } from '@/app/components/workflow/types'
 import { useEffect, useMemo, useRef } from 'react'
 import { isToolSettingShowOnSatisfied } from '@/app/components/plugins/plugin-detail-panel/tool-selector/utils/show-on'
 import { resetToolSettingFieldValue } from '@/app/components/tools/utils/to-form-schema'
+import { getChangedInputVariables } from '@/app/components/workflow/nodes/_base/components/form-input-item.helpers'
 import ToolFormItem from './item'
-
-type ResettableToolSchema = CredentialFormSchema & {
-  reset_on_change?: string[]
-}
 
 type Props = {
   readOnly: boolean
   nodeId: string
-  schema: ResettableToolSchema[]
+  schema: CredentialFormSchema[]
   value: ToolVarInputs
   onChange: (value: ToolVarInputs) => void
   onOpen?: (index: number) => void
@@ -68,7 +65,7 @@ const ToolForm: FC<Props> = ({
       const wasVisible = prevVisible.has(variable)
       const nowVisible = currentVisible.has(variable)
       if (wasVisible && !nowVisible)
-        patch[variable] = resetToolSettingFieldValue(s as { type: string, default?: string })
+        patch[variable] = resetToolSettingFieldValue(s)
     }
     prevVisibleVarsRef.current = currentVisible
     if (Object.keys(patch).length > 0)
@@ -81,12 +78,8 @@ const ToolForm: FC<Props> = ({
       return
     }
 
-    const changedVariables = new Set<string>()
     const prevValue = prevValueRef.current
-    for (const variable of Object.keys(value)) {
-      if (JSON.stringify(prevValue[variable]) !== JSON.stringify(value[variable]))
-        changedVariables.add(variable)
-    }
+    const changedVariables = getChangedInputVariables(prevValue, value)
     prevValueRef.current = value
 
     if (!changedVariables.size)

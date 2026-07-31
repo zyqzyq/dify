@@ -174,4 +174,53 @@ describe('ToolForm show_on visibility', () => {
       value: 'reset-default',
     })
   })
+
+  it('should clear dynamic-tree-select values when reset_on_change sibling changes', async () => {
+    const onChange = vi.fn()
+    const schema: CredentialFormSchema[] = [
+      textSchema({ name: 'category', variable: 'category', default: 'docs' }),
+      textSchema({
+        name: 'channel',
+        variable: 'channel',
+        type: FormTypeEnum.dynamicTreeSelect,
+        reset_on_change: ['category'],
+      } as Partial<CredentialFormSchema>),
+    ]
+    const initialValue: ToolVarInputs = {
+      category: { type: VarKindType.constant, value: 'docs' },
+      channel: { type: VarKindType.constant, value: ['old-channel'] },
+    }
+
+    const { rerender } = render(
+      <ToolForm
+        readOnly={false}
+        nodeId="n1"
+        schema={schema}
+        value={initialValue}
+        onChange={onChange}
+      />,
+    )
+
+    rerender(
+      <ToolForm
+        readOnly={false}
+        nodeId="n1"
+        schema={schema}
+        value={{
+          category: { type: VarKindType.constant, value: 'chat' },
+          channel: { type: VarKindType.constant, value: ['old-channel'] },
+        }}
+        onChange={onChange}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalled()
+    })
+    const patched = onChange.mock.calls.at(-1)?.[0] as ToolVarInputs
+    expect(patched.channel).toEqual({
+      type: VarKindType.constant,
+      value: [],
+    })
+  })
 })

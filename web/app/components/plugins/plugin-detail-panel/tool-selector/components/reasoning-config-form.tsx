@@ -28,6 +28,7 @@ import ModelParameterModal from '@/app/components/plugins/plugin-detail-panel/mo
 import CodeEditor from '@/app/components/workflow/nodes/_base/components/editor/code-editor'
 import FormInputBoolean from '@/app/components/workflow/nodes/_base/components/form-input-boolean'
 import {
+  getChangedInputVariables,
   toolDeclarativeTypeMatches,
 } from '@/app/components/workflow/nodes/_base/components/form-input-item.helpers'
 import FormInputTypeSwitch from '@/app/components/workflow/nodes/_base/components/form-input-type-switch'
@@ -76,14 +77,32 @@ function coerceReasoningScalarDefault(schema: ToolFormSchema): unknown {
       return raw
     return ''
   }
+  if (formType === FormTypeEnum.dynamicTreeSelect) {
+    if (Array.isArray(raw))
+      return raw.filter((item): item is string => typeof item === 'string')
+    if (typeof raw === 'string' && raw)
+      return [raw]
+    return []
+  }
   return raw ?? null
 }
 
 function getReasoningVarKindType(type: string): VarKindType | undefined {
   if (type === FormTypeEnum.file || type === FormTypeEnum.files)
     return VarKindType.variable
-  if (type === FormTypeEnum.select || type === FormTypeEnum.checkbox || type === FormTypeEnum.textNumber || type === FormTypeEnum.array || type === FormTypeEnum.object || type === FormTypeEnum.date || type === FormTypeEnum.datePicker)
+  if (
+    type === FormTypeEnum.select
+    || type === FormTypeEnum.checkbox
+    || type === FormTypeEnum.textNumber
+    || type === FormTypeEnum.array
+    || type === FormTypeEnum.object
+    || type === FormTypeEnum.date
+    || type === FormTypeEnum.datePicker
+    || type === FormTypeEnum.dynamicTreeSelect
+    || type === FormTypeEnum.dynamicSelect
+  ) {
     return VarKindType.constant
+  }
   if (type === FormTypeEnum.textInput || type === FormTypeEnum.secretInput)
     return VarKindType.mixed
 }
@@ -165,12 +184,8 @@ const ReasoningConfigForm: React.FC<Props> = ({
       return
     }
 
-    const changedVariables = new Set<string>()
     const prevValue = prevValueRef.current
-    for (const variable of Object.keys(value)) {
-      if (JSON.stringify(prevValue[variable]) !== JSON.stringify(value[variable]))
-        changedVariables.add(variable)
-    }
+    const changedVariables = getChangedInputVariables(prevValue, value)
     prevValueRef.current = value
 
     if (!changedVariables.size)

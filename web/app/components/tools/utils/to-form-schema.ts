@@ -196,6 +196,14 @@ const correctInitialData = (type: string, target: FormValueInput, defaultValue: 
   if (type === 'app-selector' || type === 'model-selector')
     target.value = defaultValue
 
+  if (type === FormTypeEnum.dynamicTreeSelect) {
+    target.value = Array.isArray(defaultValue)
+      ? defaultValue.filter((item): item is string => typeof item === 'string')
+      : typeof defaultValue === 'string' && defaultValue
+        ? [defaultValue]
+        : []
+  }
+
   return target
 }
 
@@ -204,7 +212,7 @@ const correctInitialData = (type: string, target: FormValueInput, defaultValue: 
  */
 export function resetToolSettingFieldValue(schema: {
   type: string
-  default?: string
+  default?: unknown
 }): ResourceVarInputs[string] {
   const defaultSource = schema.default
   const initialValue: FormValueInput = {

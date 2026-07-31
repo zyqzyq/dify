@@ -1,8 +1,9 @@
 import type { ToolParameter } from '../types'
 import { describe, expect, it } from 'vitest'
+import { FormTypeEnum } from '@/app/components/header/account-setting/model-provider-page/declarations'
 import { getDynamicOptionsResetKey, serializeResourceVarInputsForDynamicOptions } from '@/app/components/workflow/nodes/_base/components/form-input-item.helpers'
 import { VarKindType } from '@/app/components/workflow/nodes/_base/types'
-import { flattenToolSettingStoredEntry, getPlainValue, toolParametersToFormSchemas } from './to-form-schema'
+import { flattenToolSettingStoredEntry, getConfiguredValue, getPlainValue, resetToolSettingFieldValue, toolParametersToFormSchemas } from './to-form-schema'
 
 describe('toolParametersToFormSchemas', () => {
   it('should passthrough parameter-level and option-level show_on from plugin definitions', () => {
@@ -142,5 +143,54 @@ describe('getDynamicOptionsResetKey', () => {
 
     expect(sameDependency).toBe(first)
     expect(changedDependency).not.toBe(first)
+  })
+})
+
+describe('resetToolSettingFieldValue', () => {
+  it('should reset dynamic-tree-select to an explicit empty array when default is missing', () => {
+    expect(resetToolSettingFieldValue({
+      type: FormTypeEnum.dynamicTreeSelect,
+    })).toEqual({
+      type: VarKindType.constant,
+      value: [],
+    })
+  })
+
+  it('should reset dynamic-tree-select string defaults to the tree value array shape', () => {
+    expect(resetToolSettingFieldValue({
+      type: FormTypeEnum.dynamicTreeSelect,
+      default: 'node-a',
+    })).toEqual({
+      type: VarKindType.constant,
+      value: ['node-a'],
+    })
+  })
+})
+
+describe('getConfiguredValue', () => {
+  it('should initialize dynamic-tree-select string defaults with the tree value array shape', () => {
+    expect(getConfiguredValue({}, [{
+      variable: 'channel',
+      type: FormTypeEnum.dynamicTreeSelect,
+      default: 'node-a',
+    }])).toEqual({
+      channel: {
+        type: VarKindType.constant,
+        value: ['node-a'],
+      },
+    })
+  })
+
+  it('should initialize dynamic-tree-select array defaults with only string node values', () => {
+    expect(getConfiguredValue({}, [{
+      variable: 'channel',
+      type: FormTypeEnum.dynamicTreeSelect,
+      default: ['node-a', 1, 'node-b'],
+    }])).toEqual({
+      channel: {
+        type: VarKindType.constant,
+        value: ['node-a', 'node-b'],
+      },
+    })
   })
 })

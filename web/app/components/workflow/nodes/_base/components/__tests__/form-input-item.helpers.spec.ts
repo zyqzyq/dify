@@ -5,6 +5,7 @@ import { VarType } from '@/app/components/workflow/types'
 import { VarKindType } from '../../types'
 import {
   filterVisibleOptions,
+  getChangedInputVariables,
   getCheckboxListOptions,
   getCheckboxListValue,
   getFilterVar,
@@ -233,5 +234,16 @@ describe('form-input-item helpers', () => {
 
     expect(falseMultipleState.isMultipleSelect).toBe(false)
     expect(trueMultipleState.isMultipleSelect).toBe(true)
+  })
+
+  it('should detect changed input variables when a key is removed', () => {
+    const changedVariables = getChangedInputVariables({
+      category: { type: VarKindType.constant, value: 'docs' },
+      channel: { type: VarKindType.constant, value: 'general' },
+    }, {
+      channel: { type: VarKindType.constant, value: 'general' },
+    })
+
+    expect(changedVariables).toEqual(new Set(['category']))
   })
 })

@@ -50,14 +50,10 @@ import {
 } from './form-input-item.sections'
 import FormInputTypeSwitch from './form-input-type-switch'
 
-type ResettableCredentialFormSchema = CredentialFormSchema & {
-  reset_on_change?: string[]
-}
-
 type Props = {
   readOnly: boolean
   nodeId: string
-  schema: ResettableCredentialFormSchema
+  schema: CredentialFormSchema
   value: ResourceVarInputs
   onChange: (value: ResourceVarInputs) => void
   inPanel?: boolean

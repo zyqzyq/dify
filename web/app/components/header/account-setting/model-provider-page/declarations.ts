@@ -128,6 +128,8 @@ export type CredentialFormSchemaBase = {
   default?: string
   tooltip?: TypeWithI18N
   show_on: FormShowOnObject[]
+  /** Plugin YAML `reset_on_change`: reset this field when any listed sibling changes. */
+  reset_on_change?: string[]
   url?: string
   scope?: string
   input_schema?: SchemaRoot

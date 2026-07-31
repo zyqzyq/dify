@@ -225,6 +225,7 @@ export type InputVar = {
   isFileItem?: boolean
   json_schema?: string | Record<string, any> // for jsonObject type
   show_on?: ToolParameterShowOnCondition[]
+  reset_on_change?: string[]
 } & Partial<UploadFileSetting>
 
 export type ModelConfig = {

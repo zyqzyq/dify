@@ -90,6 +90,22 @@ export function getDynamicOptionsResetKey(inputs: ResourceVarInputs, resetOnChan
     .join('\0')
 }
 
+export function getChangedInputVariables(
+  prevValue: Record<string, unknown>,
+  nextValue: Record<string, unknown>,
+): Set<string> {
+  const variables = new Set([
+    ...Object.keys(prevValue),
+    ...Object.keys(nextValue),
+  ])
+  const changedVariables = new Set<string>()
+  for (const variable of variables) {
+    if (JSON.stringify(prevValue[variable]) !== JSON.stringify(nextValue[variable]))
+      changedVariables.add(variable)
+  }
+  return changedVariables
+}
+
 type FormInputState = {
   defaultValue: unknown
   isAppSelector: boolean
