@@ -106,7 +106,7 @@ class UserWorkspacesApi(Resource):
 @service_api_ns.route("/workspaces/<string:workspace_id>/model-providers/credentials")
 class WorkspaceModelProviderCredentialsApi(Resource):
     @service_api_ns.doc("get_workspace_model_provider_credentials")
-    @service_api_ns.doc(description="Get model provider credentials for one workspace")
+    @service_api_ns.doc(description="Get decrypted provider-level and custom-model credentials for one workspace")
     @service_api_ns.doc(
         params={
             "workspace_id": {
@@ -136,7 +136,7 @@ class WorkspaceModelProviderCredentialsApi(Resource):
     )
     @validate_dataset_token
     def get(self, _, workspace_id: str):
-        """Get provider credentials and optionally filter model-level credentials."""
+        """Get provider credentials and optionally filter custom-model credentials."""
         workspace = _get_workspace(workspace_id)
         if workspace is None:
             raise NotFound("Workspace not found.")

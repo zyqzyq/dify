@@ -6,8 +6,13 @@ import pytest
 from core.entities.provider_entities import CredentialConfiguration, CustomModelConfiguration
 from core.model_runtime.entities.common_entities import I18nObject
 from core.model_runtime.entities.model_entities import ModelType
-from core.model_runtime.entities.provider_entities import ConfigurateMethod, CredentialFormSchema, FormType
-from models.provider import ProviderType
+from core.model_runtime.entities.provider_entities import (
+    ConfigurateMethod,
+    CredentialFormSchema,
+    FormType,
+    ProviderCredentialSchema,
+)
+from models.provider import ProviderCredential, ProviderModelCredential, ProviderType
 from services.model_provider_service import ModelProviderService
 
 
@@ -24,6 +29,7 @@ def _make_fake_provider_configuration(
     has_custom_config: bool = True,
     provider_available_credentials: list[CredentialConfiguration] | None = None,
     model_available_credentials: list[CredentialConfiguration] | None = None,
+    provider_credential_form_schemas: list[CredentialFormSchema] | None = None,
     model_credential_form_schemas: list[CredentialFormSchema] | None = None,
     provider_credentials: dict | None = None,
     model_credentials: dict | None = None,
@@ -38,7 +44,9 @@ def _make_fake_provider_configuration(
         help=None,
         supported_model_types=[ModelType.LLM],
         configurate_methods=[ConfigurateMethod.CUSTOMIZABLE_MODEL],
-        provider_credential_schema=None,
+        provider_credential_schema=ProviderCredentialSchema(credential_form_schemas=provider_credential_form_schemas)
+        if provider_credential_form_schemas is not None
+        else None,
         model_credential_schema=types.SimpleNamespace(credential_form_schemas=model_credential_form_schemas)
         if model_credential_form_schemas is not None
         else None,
@@ -88,7 +96,9 @@ def _make_fake_provider_configuration(
         custom_configuration=fake_custom_configuration,
         system_configuration=fake_system_configuration,
         is_custom_configuration_available=lambda: has_custom_config,
-        extract_secret_variables=lambda _: [],
+        extract_secret_variables=lambda schemas: [
+            schema.variable for schema in schemas if schema.type == FormType.SECRET_INPUT
+        ],
         get_provider_credential=_get_provider_credential,
         get_custom_model_credential=_get_custom_model_credential,
     )
@@ -99,13 +109,29 @@ def _make_fake_provider_configuration(
 @pytest.fixture(autouse=True)
 def mock_credential_queries():
     records = {
-        "provider-cred-1": types.SimpleNamespace(encrypted_config='{"api_key": "******abcd"}'),
+        "provider-cred-1": types.SimpleNamespace(
+            id="provider-cred-1",
+            tenant_id="tenant-1",
+            provider_name="openai",
+            credential_name="Provider Key 1",
+            encrypted_config='{"api_key": "encrypted-provider-key"}',
+        ),
         "model-cred-1": types.SimpleNamespace(encrypted_config='{"api_key": "******efgh"}'),
         "model-cred-2": types.SimpleNamespace(encrypted_config='{"api_key": "******ijkl"}'),
         "model-cred-no-api-key": types.SimpleNamespace(encrypted_config='{"base_url": "https://example.com"}'),
     }
 
     def execute(statement):
+        selected_entity = statement.column_descriptions[0].get("entity")
+        if selected_entity is ProviderCredential:
+            params = statement.compile().params
+            provider_names = next((value for value in params.values() if isinstance(value, list)), [])
+            result = MagicMock()
+            result.scalars.return_value.all.return_value = [
+                record for record in records.values() if getattr(record, "provider_name", None) in provider_names
+            ]
+            return result
+
         credential_id = next(
             (value for value in statement.compile().params.values() if isinstance(value, str) and value in records),
             None,
@@ -146,7 +172,10 @@ def test_get_all_credentials_returns_provider_and_model_credentials(
 
     assert len(result) == 1
     assert result[0].provider == "openai"
-    assert not hasattr(result[0], "provider_credentials")
+    assert len(result[0].provider_credentials) == 1
+    assert result[0].provider_credentials[0].credential_id == "provider-cred-1"
+    assert result[0].provider_credentials[0].credential_name == "Provider Key 1"
+    assert result[0].provider_credentials[0].credentials == {"api_key": "encrypted-provider-key"}
 
     assert len(result[0].model_credentials) == 1
     assert result[0].model_credentials[0].credential_id == "model-cred-1"
@@ -154,6 +183,107 @@ def test_get_all_credentials_returns_provider_and_model_credentials(
     assert result[0].model_credentials[0].model == "gpt-4o-mini"
     assert result[0].model_credentials[0].model_type == ModelType.LLM
     assert result[0].model_credentials[0].credentials == {"api_key": "******efgh"}
+
+
+def test_get_all_credentials_decrypts_enterprise_provider_api_key_without_active_custom_configuration():
+    provider_config = _make_fake_provider_configuration(
+        provider_name="openai",
+        has_custom_config=False,
+        provider_credential_form_schemas=[
+            CredentialFormSchema(
+                variable="api_key",
+                label=I18nObject(en_US="API Key"),
+                type=FormType.SECRET_INPUT,
+            )
+        ],
+    )
+
+    class _FakeProviderManager:
+        def get_configurations(self, tenant_id: str) -> _FakeConfigurations:
+            return _FakeConfigurations(provider_config)
+
+    service = ModelProviderService()
+    service.provider_manager = _FakeProviderManager()
+
+    with patch(
+        "services.model_provider_service.encrypter.decrypt_token",
+        return_value="sk-enterprise-plain-text",
+    ) as decrypt_token:
+        result = service.get_all_credentials(tenant_id="tenant-1")
+
+    assert len(result) == 1
+    assert result[0].provider == "openai"
+    assert result[0].provider_credentials[0].credentials == {"api_key": "sk-enterprise-plain-text"}
+    assert result[0].model_credentials == []
+    decrypt_token.assert_called_once_with(tenant_id="tenant-1", token="encrypted-provider-key")
+
+
+def test_get_all_credentials_returns_enterprise_model_credential_not_present_in_local_configuration():
+    provider_name = "langgenius/openai_api_compatible/openai_api_compatible"
+    provider_config = _make_fake_provider_configuration(
+        provider_name=provider_name,
+        has_custom_config=False,
+        model_available_credentials=[],
+        model_credential_form_schemas=[
+            CredentialFormSchema(
+                variable="api_key",
+                label=I18nObject(en_US="API Key"),
+                type=FormType.SECRET_INPUT,
+            )
+        ],
+    )
+    enterprise_model_credential = types.SimpleNamespace(
+        id="enterprise-model-cred-1",
+        tenant_id="tenant-1",
+        provider_name=provider_name,
+        model_name="internal-chat-model",
+        model_type="llm",
+        credential_name="Enterprise Internal Model",
+        encrypted_config='{"api_key": "encrypted-enterprise-model-key", "endpoint_url": "https://llm.internal/v1"}',
+    )
+
+    class _FakeProviderManager:
+        def get_configurations(self, tenant_id: str) -> _FakeConfigurations:
+            return _FakeConfigurations(provider_config)
+
+    def execute(statement):
+        selected_entity = statement.column_descriptions[0].get("entity")
+        result = MagicMock()
+        if selected_entity is ProviderCredential:
+            result.scalars.return_value.all.return_value = []
+        elif selected_entity is ProviderModelCredential:
+            result.scalars.return_value.all.return_value = [enterprise_model_credential]
+        return result
+
+    service = ModelProviderService()
+    service.provider_manager = _FakeProviderManager()
+
+    with (
+        patch("services.model_provider_service.db.session.execute", side_effect=execute),
+        patch(
+            "services.model_provider_service.encrypter.decrypt_token",
+            return_value="sk-enterprise-model-plain-text",
+        ) as decrypt_token,
+    ):
+        result = service.get_all_credentials(tenant_id="tenant-1")
+
+    assert len(result) == 1
+    assert result[0].provider == provider_name
+    assert result[0].provider_credentials == []
+    assert len(result[0].model_credentials) == 1
+    model_credential = result[0].model_credentials[0]
+    assert model_credential.model == "internal-chat-model"
+    assert model_credential.model_type == ModelType.LLM
+    assert model_credential.credential_id == "enterprise-model-cred-1"
+    assert model_credential.credential_name == "Enterprise Internal Model"
+    assert model_credential.credentials == {
+        "api_key": "sk-enterprise-model-plain-text",
+        "endpoint_url": "https://llm.internal/v1",
+    }
+    decrypt_token.assert_called_once_with(
+        tenant_id="tenant-1",
+        token="encrypted-enterprise-model-key",
+    )
 
 
 def test_get_all_credentials_matches_credential_provider_name_aliases():

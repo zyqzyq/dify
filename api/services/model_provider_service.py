@@ -10,7 +10,7 @@ from core.model_runtime.entities.model_entities import ModelType, ParameterRule
 from core.model_runtime.model_providers.model_provider_factory import ModelProviderFactory
 from core.provider_manager import ProviderManager
 from extensions.ext_database import db
-from models.provider import ProviderModelCredential, ProviderType
+from models.provider import ProviderCredential, ProviderModelCredential, ProviderType
 from services.entities.model_provider_entities import (
     CustomConfigurationResponse,
     CustomConfigurationStatus,
@@ -18,6 +18,7 @@ from services.entities.model_provider_entities import (
     ModelCredentialItemResponse,
     ModelWithProviderEntityResponse,
     ProviderAllCredentialsResponse,
+    ProviderCredentialItemResponse,
     ProviderResponse,
     ProviderWithModelsResponse,
     SimpleProviderEntityResponse,
@@ -170,49 +171,93 @@ class ModelProviderService:
         self, tenant_id: str, model_name: str | None = None, model_type: str | None = None
     ) -> list[ProviderAllCredentialsResponse]:
         """
-        Get all provider and model credentials for the workspace.
+        Get all provider-level and custom-model credentials for the workspace in plain text.
 
         :param tenant_id: workspace id
         :param model_name: exact model name used to filter model-level credentials
         :param model_type: exact model type used to filter model-level credentials
         :return: list of model credentials grouped by provider
 
-        Provider-level credentials are intentionally excluded because this export is scoped to model
-        credentials. When ``model_name`` or ``model_type`` is set, only matching model-level credentials
-        are read.
+        Provider-level credentials include assigned Enterprise global credentials synchronized into
+        ``provider_credentials``. They apply to predefined models and are always returned; ``model_name``
+        and ``model_type`` only filter custom-model credentials.
         """
         provider_configurations = self.provider_manager.get_configurations(tenant_id)
         results: list[ProviderAllCredentialsResponse] = []
+        filtered_model_type = ModelType.value_of(model_type) if model_type is not None else None
 
         for provider_configuration in provider_configurations.values():
-            if not provider_configuration.is_custom_configuration_available():
-                continue
+            provider_name = provider_configuration.provider.provider
+            provider_names = ProviderManager._get_provider_names(provider_name)
+
+            provider_credential_form_schemas = (
+                provider_configuration.provider.provider_credential_schema.credential_form_schemas
+                if provider_configuration.provider.provider_credential_schema
+                else []
+            )
+            provider_credential_secret_variables = provider_configuration.extract_secret_variables(
+                provider_credential_form_schemas
+            )
+            required_provider_credential_keys = [
+                form_schema.variable
+                for form_schema in provider_credential_form_schemas
+                if form_schema.variable == "api_key"
+            ]
+            provider_credential_records = (
+                db.session.execute(
+                    select(ProviderCredential)
+                    .where(
+                        ProviderCredential.tenant_id == tenant_id,
+                        ProviderCredential.provider_name.in_(provider_names),
+                    )
+                    .order_by(ProviderCredential.created_at.desc())
+                )
+                .scalars()
+                .all()
+            )
+            provider_credentials = [
+                ProviderCredentialItemResponse(
+                    credential_id=credential_record.id,
+                    credential_name=credential_record.credential_name,
+                    credentials=self._decode_plain_credentials(
+                        tenant_id=tenant_id,
+                        encrypted_config=credential_record.encrypted_config,
+                        secret_variables=provider_credential_secret_variables,
+                        required_keys=required_provider_credential_keys,
+                    ),
+                )
+                for credential_record in provider_credential_records
+            ]
 
             model_credentials: list[ModelCredentialItemResponse] = []
+            exported_model_credential_ids: set[str] = set()
+            model_credential_form_schemas = (
+                provider_configuration.provider.model_credential_schema.credential_form_schemas
+                if provider_configuration.provider.model_credential_schema
+                else []
+            )
+            model_credential_secret_variables = provider_configuration.extract_secret_variables(
+                model_credential_form_schemas
+            )
+            required_model_credential_keys = [
+                form_schema.variable
+                for form_schema in model_credential_form_schemas
+                if form_schema.variable == "api_key"
+            ]
 
-            # Model-level credentials (plain text, no obfuscation)
-            for model_config in provider_configuration.custom_configuration.models:
+            # Enterprise model credentials may exist without a locally active model. ProviderManager includes
+            # those synchronized records in custom_configuration.models so their API keys remain exportable.
+            custom_models = (
+                provider_configuration.custom_configuration.models
+                if provider_configuration.is_custom_configuration_available()
+                else []
+            )
+            for model_config in custom_models:
                 if model_name is not None and model_config.model != model_name:
                     continue
 
-                if model_type is not None and model_config.model_type != ModelType.value_of(model_type):
+                if filtered_model_type is not None and model_config.model_type != filtered_model_type:
                     continue
-
-                model_credential_form_schemas = (
-                    provider_configuration.provider.model_credential_schema.credential_form_schemas
-                    if provider_configuration.provider.model_credential_schema
-                    else []
-                )
-                model_credential_secret_variables = provider_configuration.extract_secret_variables(
-                    model_credential_form_schemas
-                )
-                required_credential_keys = [
-                    form_schema.variable
-                    for form_schema in model_credential_form_schemas
-                    if form_schema.variable == "api_key"
-                ]
-                provider_name = provider_configuration.provider.provider
-                provider_names = ProviderManager._get_provider_names(provider_name)
 
                 for cred_config in model_config.available_model_credentials:
                     credential_record = db.session.execute(
@@ -232,7 +277,7 @@ class ModelProviderService:
                         tenant_id=tenant_id,
                         encrypted_config=credential_record.encrypted_config,
                         secret_variables=model_credential_secret_variables,
-                        required_keys=required_credential_keys,
+                        required_keys=required_model_credential_keys,
                     )
 
                     model_credentials.append(
@@ -244,12 +289,67 @@ class ModelProviderService:
                             credentials=credentials or {},
                         )
                     )
+                    exported_model_credential_ids.add(cred_config.credential_id)
 
-            if model_credentials:
+            # Enterprise can synchronize a model credential before a local ProviderModel/custom-model entry
+            # exists. Read the credential table directly so those assigned credentials are still exported.
+            synchronized_model_credential_records = (
+                db.session.execute(
+                    select(ProviderModelCredential)
+                    .where(
+                        ProviderModelCredential.tenant_id == tenant_id,
+                        ProviderModelCredential.provider_name.in_(provider_names),
+                    )
+                    .order_by(ProviderModelCredential.created_at.desc())
+                )
+                .scalars()
+                .all()
+            )
+            for credential_record in synchronized_model_credential_records:
+                if credential_record.id in exported_model_credential_ids:
+                    continue
+
+                try:
+                    credential_model_type = ModelType.value_of(credential_record.model_type)
+                except ValueError:
+                    logger.warning(
+                        "Skipping model credential with invalid model type",
+                        extra={
+                            "tenant_id": tenant_id,
+                            "provider": provider_name,
+                            "credential_id": credential_record.id,
+                            "model_type": credential_record.model_type,
+                        },
+                    )
+                    continue
+
+                if model_name is not None and credential_record.model_name != model_name:
+                    continue
+                if filtered_model_type is not None and credential_model_type != filtered_model_type:
+                    continue
+
+                credentials = self._decode_plain_credentials(
+                    tenant_id=tenant_id,
+                    encrypted_config=credential_record.encrypted_config,
+                    secret_variables=model_credential_secret_variables,
+                    required_keys=required_model_credential_keys,
+                )
+                model_credentials.append(
+                    ModelCredentialItemResponse(
+                        model=credential_record.model_name,
+                        model_type=credential_model_type,
+                        credential_id=credential_record.id,
+                        credential_name=credential_record.credential_name,
+                        credentials=credentials or {},
+                    )
+                )
+
+            if provider_credentials or model_credentials:
                 results.append(
                     ProviderAllCredentialsResponse(
-                        provider=provider_configuration.provider.provider,
+                        provider=provider_name,
                         label=provider_configuration.provider.label,
+                        provider_credentials=provider_credentials,
                         model_credentials=model_credentials,
                     )
                 )

@@ -180,6 +180,14 @@ class ModelWithProviderEntityResponse(ProviderModelWithStatusEntity):
         super().__init__(**dump_model)
 
 
+class ProviderCredentialItemResponse(BaseModel):
+    """Provider-level credential payload, including decrypted credential fields."""
+
+    credential_id: str
+    credential_name: str
+    credentials: dict
+
+
 class ModelCredentialItemResponse(BaseModel):
     """
     Model credential item response.
@@ -193,10 +201,9 @@ class ModelCredentialItemResponse(BaseModel):
 
 
 class ProviderAllCredentialsResponse(BaseModel):
-    """
-    Provider all credentials response.
-    """
+    """All decrypted provider-level and custom-model credentials for one provider."""
 
     provider: str
     label: I18nObject
+    provider_credentials: list[ProviderCredentialItemResponse]
     model_credentials: list[ModelCredentialItemResponse]
