@@ -1,3 +1,4 @@
+import logging
 import uuid
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -165,6 +166,48 @@ def test_workspace_credentials_passes_model_name_and_model_type_filters(app):
         model_type="llm",
     )
     assert result == {"data": []}
+
+
+def test_workspace_credentials_rejects_invalid_model_type(app):
+    api = WorkspaceModelProviderCredentialsApi()
+    method = unwrap(api.get)
+    workspace = SimpleNamespace(id="workspace-1")
+
+    with (
+        app.test_request_context("/workspaces/workspace-1/model-providers/credentials?model_type=not-a-type"),
+        patch(
+            "controllers.service_api.workspace.model_providers._get_workspace",
+            return_value=workspace,
+        ),
+        pytest.raises(BadRequest, match="Invalid model_type"),
+    ):
+        method(api, "authenticated-workspace", workspace_id="workspace-1")
+
+
+def test_workspace_credentials_logs_duration(app, caplog):
+    api = WorkspaceModelProviderCredentialsApi()
+    method = unwrap(api.get)
+    workspace = SimpleNamespace(id="workspace-1")
+
+    with (
+        app.test_request_context(
+            "/workspaces/workspace-1/model-providers/credentials?model_name=gpt-4o-mini&model_type=llm"
+        ),
+        patch(
+            "controllers.service_api.workspace.model_providers._get_workspace",
+            return_value=workspace,
+        ),
+        patch(
+            "controllers.service_api.workspace.model_providers.ModelProviderService.get_all_credentials",
+            return_value=[],
+        ),
+        caplog.at_level(logging.INFO, logger="controllers.service_api.workspace.model_providers"),
+    ):
+        method(api, "authenticated-workspace", workspace_id="workspace-1")
+
+    assert "GET workspace model-provider credentials" in caplog.text
+    assert "workspace_id=workspace-1" in caplog.text
+    assert "duration_ms=" in caplog.text
 
 
 def test_workspace_credentials_returns_not_found_for_unknown_workspace(app):

@@ -201,7 +201,7 @@ class ModelCredentialItemResponse(BaseModel):
 
 
 class ProviderAllCredentialsResponse(BaseModel):
-    """All decrypted provider-level and custom-model credentials for one provider."""
+    """Custom-model credentials for one provider. ``provider_credentials`` is always empty."""
 
     provider: str
     label: I18nObject

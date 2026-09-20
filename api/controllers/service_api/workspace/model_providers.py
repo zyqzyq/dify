@@ -1,5 +1,7 @@
 """Service API endpoints for resolving user workspaces and reading their model credentials."""
 
+import logging
+import time
 import uuid
 
 from flask import request
@@ -10,11 +12,14 @@ from werkzeug.exceptions import BadRequest, NotFound, Unauthorized
 
 from controllers.service_api import service_api_ns
 from controllers.service_api.wraps import validate_dataset_token
+from core.model_runtime.entities.model_entities import ModelType
 from core.model_runtime.utils.encoders import jsonable_encoder
 from extensions.ext_database import db
 from models.account import Account, Tenant, TenantAccountJoin
 from services.account_service import AccountService
 from services.model_provider_service import ModelProviderService
+
+logger = logging.getLogger(__name__)
 
 
 def _resolve_account(*, user_id: str | None, email: str | None) -> Account:
@@ -106,7 +111,7 @@ class UserWorkspacesApi(Resource):
 @service_api_ns.route("/workspaces/<string:workspace_id>/model-providers/credentials")
 class WorkspaceModelProviderCredentialsApi(Resource):
     @service_api_ns.doc("get_workspace_model_provider_credentials")
-    @service_api_ns.doc(description="Get decrypted provider-level and custom-model credentials for one workspace")
+    @service_api_ns.doc(description="Get decrypted custom-model credentials for one workspace")
     @service_api_ns.doc(
         params={
             "workspace_id": {
@@ -130,15 +135,22 @@ class WorkspaceModelProviderCredentialsApi(Resource):
         },
         responses={
             200: "Credentials retrieved successfully",
+            400: "Invalid model_type",
             401: "Unauthorized - invalid API token",
             404: "Workspace not found",
         },
     )
     @validate_dataset_token
     def get(self, _, workspace_id: str):
-        """Get provider credentials and optionally filter custom-model credentials."""
+        """Get custom-model credentials and optionally filter by model name or type."""
+        started = time.perf_counter()
         workspace = _get_workspace(workspace_id)
         if workspace is None:
+            logger.info(
+                "GET workspace model-provider credentials workspace_id=%s status=not_found duration_ms=%.3f",
+                workspace_id,
+                (time.perf_counter() - started) * 1000,
+            )
             raise NotFound("Workspace not found.")
 
         model_name = request.args.get("model_name")
@@ -148,10 +160,32 @@ class WorkspaceModelProviderCredentialsApi(Resource):
         model_type = request.args.get("model_type")
         if model_type is not None:
             model_type = model_type.strip() or None
+        if model_type is not None:
+            try:
+                ModelType.value_of(model_type)
+            except ValueError as exc:
+                logger.info(
+                    "GET workspace model-provider credentials workspace_id=%s status=invalid_model_type "
+                    "model_type=%s duration_ms=%.3f",
+                    workspace_id,
+                    model_type,
+                    (time.perf_counter() - started) * 1000,
+                )
+                raise BadRequest("Invalid model_type.") from exc
 
         credentials = ModelProviderService().get_all_credentials(
             tenant_id=workspace.id,
             model_name=model_name,
             model_type=model_type,
+        )
+        logger.info(
+            "GET workspace model-provider credentials workspace_id=%s tenant_id=%s model_name=%s model_type=%s "
+            "providers=%s duration_ms=%.3f",
+            workspace_id,
+            workspace.id,
+            model_name,
+            model_type,
+            len(credentials),
+            (time.perf_counter() - started) * 1000,
         )
         return jsonable_encoder({"data": credentials})
